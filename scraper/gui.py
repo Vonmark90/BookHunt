@@ -211,7 +211,7 @@ class BookHuntGUI(ctk.CTk):
 
         ctk.CTkLabel(sources_row, text="Sources:", font=("Helvetica", 12, "bold")).pack(side="left", padx=(4, 6))
 
-        self.src_dork = ctk.CTkCheckBox(sources_row, text="Web Dork", width=80)
+        self.src_dork = ctk.CTkCheckBox(sources_row, text="Google + DDG", width=100)
         self.src_dork.select()
         self.src_dork.pack(side="left", padx=2)
 

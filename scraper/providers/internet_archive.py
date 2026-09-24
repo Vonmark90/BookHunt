@@ -9,7 +9,7 @@ from ..models import ResourceItem
 
 
 class InternetArchiveProvider(BaseProvider):
-    """Searches the Internet Archive's millions of digitized books, papers, and manuscripts."""
+    """Searches the Internet Archive for publicly downloadable digitized books, papers, and manuscripts."""
 
     name = "Internet Archive"
     supported_formats = ["PDF", "EPUB", "DJVU"]
@@ -22,16 +22,22 @@ class InternetArchiveProvider(BaseProvider):
     ) -> List[ResourceItem]:
         items: List[ResourceItem] = []
         
-        # Build Lucene query for Internet Archive
-        clean_q = query.replace('"', '\\"')
-        lucene_query = f'({clean_q}) AND mediatype:(texts)'
+        # Build Lucene query for Internet Archive excluding lending library and restricted items
+        # to ensure links are publicly downloadable without HTTP 401 Unauthorized errors
+        clean_q = query.replace("\"", "\\\"")
+        lucene_query = (
+            f"({clean_q}) AND mediatype:(texts) "
+            "-access-restricted-item:true "
+            "-collection:lendinglibrary "
+            "-collection:inlibrary"
+        )
         
         if file_format:
             fmt_upper = file_format.upper()
             if fmt_upper == "PDF":
-                lucene_query += ' AND (format:"Text PDF" OR format:"Additional Text PDF" OR format:"PDF")'
+                lucene_query += " AND (format:\"Text PDF\" OR format:\"Additional Text PDF\" OR format:\"PDF\")"
             elif fmt_upper == "EPUB":
-                lucene_query += ' AND format:"EPUB"'
+                lucene_query += " AND format:\"EPUB\""
 
         params = {
             "q": lucene_query,
@@ -75,14 +81,13 @@ class InternetArchiveProvider(BaseProvider):
                     if isinstance(formats, str):
                         formats = [formats]
 
-                    # Determine preferred format and construct download link
+                    # Determine preferred format
                     target_fmt = "PDF"
                     dl_ext = "pdf"
                     if file_format and file_format.upper() == "EPUB":
                         target_fmt = "EPUB"
                         dl_ext = "epub"
                     elif "EPUB" in formats and not file_format:
-                        # If both are available, default to PDF or EPUB based on user
                         target_fmt = "PDF" if any("PDF" in f for f in formats) else "EPUB"
                         dl_ext = target_fmt.lower()
                     
@@ -102,7 +107,7 @@ class InternetArchiveProvider(BaseProvider):
                         details_url=details_url,
                         size_bytes=size_bytes,
                         description=str(description)[:300] if description else None,
-                        score=85.0,
+                        score=87.0,
                     )
                     items.append(item)
 

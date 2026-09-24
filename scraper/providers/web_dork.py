@@ -14,7 +14,7 @@ from ..models import ResourceItem
 class WebDorkProvider(BaseProvider):
     """Searches open web engines using dork operators (filetype:pdf, ext:epub, intitle:index of, etc.)."""
 
-    name: str = "Web Dorking (DDG)"
+    name: str = "Web Search (Google + DDG)"
     supported_formats: list[str] = ["PDF", "EPUB"]
 
     # Multiple dorking templates to surface hidden documents, books, and open directories
@@ -50,22 +50,34 @@ class WebDorkProvider(BaseProvider):
         else:
             dorks_to_run.extend(self.DORK_TEMPLATES[:3])
 
+        # Reserve room for both engines so one engine cannot crowd the other out.
+        per_engine_limit = max(1, (limit + 1) // 2)
         async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
-            for dork_pattern, dork_type in dorks_to_run:
-                if len(results) >= limit:
-                    break
-                dork_query = dork_pattern.format(query=query)
-                try:
-                    items = await self._search_duckduckgo_html(client, dork_query, dork_type, limit - len(results))
-                    for item in items:
-                        if file_format and item.format != file_format.upper():
-                            continue
-                        if item.download_url not in seen_urls:
+            for engine, search_method in (
+                ("Google", self._search_google_html),
+                ("DuckDuckGo", self._search_duckduckgo_html),
+            ):
+                engine_count = 0
+                for dork_pattern, dork_type in dorks_to_run:
+                    if engine_count >= per_engine_limit:
+                        break
+                    dork_query = dork_pattern.format(query=query)
+                    try:
+                        items = await search_method(
+                            client, dork_query, f"{engine}: {dork_type}",
+                            per_engine_limit - engine_count,
+                        )
+                        for item in items:
+                            if file_format and item.format != file_format.upper():
+                                continue
+                            if item.download_url in seen_urls:
+                                continue
                             seen_urls.add(item.download_url)
                             results.append(item)
-                except Exception:
-                    # Continue gracefully if a query encounters a temporary block
-                    continue
+                            engine_count += 1
+                    except Exception:
+                        # Search engines may block or change their result markup.
+                        continue
 
         return results[:limit]
 
@@ -122,7 +134,7 @@ class WebDorkProvider(BaseProvider):
                 title=clean_title or title,
                 download_url=actual_url,
                 format=detected_format,
-                source=f"Web Dork ({dork_type})",
+                source=f"Web Search ({dork_type.split(':', 1)[0]})",
                 description=snippet,
                 dork_type=dork_type,
                 details_url=actual_url,
@@ -132,14 +144,66 @@ class WebDorkProvider(BaseProvider):
 
         return items
 
+    async def _search_google_html(
+        self,
+        client: httpx.AsyncClient,
+        search_query: str,
+        dork_type: str,
+        limit: int,
+    ) -> list[ResourceItem]:
+        """Search Google's public results page for links to document files."""
+        response = await client.get(
+            "https://www.google.com/search",
+            params={"q": search_query, "num": min(max(limit * 2, 10), 100)},
+            headers=DEFAULT_HEADERS,
+        )
+        if response.status_code != 200:
+            return []
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        items: list[ResourceItem] = []
+        seen: set[str] = set()
+        for heading in soup.select("a:has(h3)"):
+            if len(items) >= limit:
+                break
+            target = self._extract_target_url(str(heading.get("href", "")))
+            if not target:
+                continue
+            if "google." in urllib.parse.urlparse(target).netloc.lower():
+                continue
+
+            title = heading.get_text(" ", strip=True)
+            card = heading.find_parent("div", class_=re.compile(r"\bMjjYud\b"))
+            snippet_node = card.select_one(".VwiC3b, .aCOpRe") if card else None
+            snippet = snippet_node.get_text(" ", strip=True) if snippet_node else ""
+            detected_format = self._detect_format(target, title, snippet)
+            if not detected_format or target in seen:
+                continue
+
+            seen.add(target)
+            items.append(ResourceItem(
+                title=title or target,
+                download_url=target,
+                format=detected_format,
+                source="Web Search (Google)",
+                description=snippet,
+                dork_type=dork_type,
+                details_url=target,
+                score=70.0,
+            ))
+        return items
+
     def _extract_target_url(self, href: str) -> str | None:
         """Extracts the actual destination URL from a search engine redirect parameter."""
         if not href:
             return None
         parsed = urllib.parse.urlparse(href)
         params = urllib.parse.parse_qs(parsed.query)
-        if params.get("uddg"):
-            target = params["uddg"][0]
+        redirect = params.get("uddg")
+        if not redirect and parsed.path == "/url" and "google." in parsed.netloc.lower():
+            redirect = params.get("q")
+        if redirect:
+            target = redirect[0]
             # DDG sometimes double-encodes its redirect target.
             for _ in range(2):
                 decoded = urllib.parse.unquote(target)
