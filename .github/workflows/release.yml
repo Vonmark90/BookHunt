@@ -1,0 +1,49 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: Build macOS DMG & Publish Release
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run Test Suite
+        run: |
+          pytest -v
+
+      - name: Build Standalone macOS App Bundle & DMG
+        run: |
+          python build_app.py
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, "refs/tags/")
+        with:
+          name: BookHunt ${{ github.ref_name }}
+          files: |
+            dist/BookHunt-*.dmg
+            dist/BookHunt-*.pkg
+          draft: false
+          prerelease: false
+          generate_release_notes: true

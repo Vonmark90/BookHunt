@@ -44,7 +44,22 @@ A high-performance universal document and eBook search aggregator, dorking engin
 
 ---
 
-## 🚀 Quick Start (New Machine Setup)
+## 💾 Download Standalone macOS App (Zero Setup)
+
+Pre-built standalone desktop installers are available for macOS with no Python, terminal, or dependencies required:
+
+| Release Asset | Format | Compatibility |
+| :--- | :--- | :--- |
+| **BookHunt-1.0.0.dmg** | Disk Image (Drag & Drop) | macOS 10.15+ (Intel & Apple Silicon) |
+| **BookHunt-1.0.0.pkg** | Apple Installer Package | macOS 10.15+ (Intel & Apple Silicon) |
+
+1. Download **`BookHunt-1.0.0.dmg`** from [GitHub Releases](https://github.com/Vonmark90/BookHunt/releases).
+2. Open the disk image and drag **BookHunt.app** into your **Applications** folder.
+3. Launch **BookHunt** directly from Spotlight or Launchpad!
+
+---
+
+## 🚀 Quick Start (Developer & CLI Setup)
 
 ### 1-Step Setup
 On a new Mac laptop, run the automated setup script:
