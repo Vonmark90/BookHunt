@@ -68,3 +68,4 @@ BookHunt.app/
 
 # Antigravity CLI local session cache
 .gemini/
+*.spec

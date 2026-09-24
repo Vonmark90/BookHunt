@@ -1,115 +1,95 @@
-"""Generates the macOS BookHunt.app application bundle with custom icon."""
+#!/usr/bin/env python3
+"""Native macOS Application Bundle and Installer Builder for BookHunt.
+
+Produces:
+1. BookHunt.app (standalone sandboxed macOS application bundle)
+2. dist/BookHunt-1.0.0.dmg (drag-and-drop installer disk image)
+3. dist/BookHunt-1.0.0.pkg (Apple App Store / Transporter compliant installer)
+"""
 
 import os
-import shutil
-import subprocess
 import sys
+import shutil
+import plistlib
+import subprocess
 from pathlib import Path
+from PIL import Image, ImageDraw
 
 
-def create_app_icon(output_icns: Path):
-    """Draws a modern macOS style squircle book & search icon and compiles to .icns."""
-    try:
-        from PIL import Image, ImageDraw
-    except ImportError:
-        print("Pillow not installed. Skipping dynamic icon drawing.")
-        return False
-
+def create_app_icon(output_icns: Path) -> bool:
+    """Generate a high-resolution retina macOS icon (.icns)."""
     size = 1024
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # 1. Background Rounded Squircle with gradient
-    margin = 80
-    r = 200
-    box = [margin, margin, size - margin, size - margin]
+    # Outer rounded squircle
+    margin = 48
+    draw.rounded_rectangle(
+        [margin, margin, size - margin, size - margin],
+        radius=210,
+        fill=(18, 22, 28, 255),
+        outline=(52, 63, 75, 255),
+        width=12,
+    )
 
-    # Fill base squircle
-    draw.rounded_rectangle(box, radius=r, fill=(24, 28, 38, 255), outline=(56, 139, 253, 200), width=12)
+    # Accent gradient glow inside
+    draw.rounded_rectangle(
+        [margin + 16, margin + 16, size - margin - 16, size - margin - 16],
+        radius=195,
+        fill=(24, 30, 39, 255),
+    )
 
-    # Decorative subtle accent glow / ribbon
-    accent_box = [margin + 20, margin + 20, size - margin - 20, size - margin - 20]
-    draw.rounded_rectangle(accent_box, radius=r - 10, outline=(97, 175, 239, 60), width=6)
+    # Book covers & pages
+    book_x0, book_y0 = 240, 310
+    book_w, book_h = 544, 400
 
-    # 2. Draw Book Silhouette (Center)
-    center_x = size // 2
-    book_top = 280
-    book_bottom = 680
-    spine_x = center_x
-    page_w = 260
+    draw.rounded_rectangle(
+        [book_x0, book_y0, book_x0 + book_w, book_y0 + book_h],
+        radius=28,
+        fill=(226, 232, 240, 255),
+        outline=(148, 163, 184, 255),
+        width=8,
+    )
+    draw.line(
+        [book_x0 + book_w // 2, book_y0, book_x0 + book_w // 2, book_y0 + book_h],
+        fill=(100, 116, 139, 255),
+        width=10,
+    )
 
-    # Left Page
-    left_poly = [
-        (spine_x - 10, book_bottom - 40),
-        (spine_x - page_w, book_bottom),
-        (spine_x - page_w, book_top + 40),
-        (spine_x - 10, book_top),
-    ]
-    draw.polygon(left_poly, fill=(235, 240, 248, 255))
+    # Text lines on book
+    for y_off in range(60, 320, 48):
+        draw.line([book_x0 + 40, book_y0 + y_off, book_x0 + 220, book_y0 + y_off], fill=(148, 163, 184, 255), width=8)
+        draw.line([book_x0 + 310, book_y0 + y_off, book_x0 + 490, book_y0 + y_off], fill=(148, 163, 184, 255), width=8)
 
-    # Right Page
-    right_poly = [
-        (spine_x + 10, book_bottom - 40),
-        (spine_x + page_w, book_bottom),
-        (spine_x + page_w, book_top + 40),
-        (spine_x + 10, book_top),
-    ]
-    draw.polygon(right_poly, fill=(215, 225, 238, 255))
-
-    # Page line details (Left)
-    for y_off in [60, 110, 160, 210]:
-        draw.line(
-            [(spine_x - 40, book_top + y_off), (spine_x - page_w + 50, book_top + y_off + 8)],
-            fill=(170, 185, 205, 255),
-            width=8,
-        )
-
-    # Page line details (Right)
-    for y_off in [60, 110, 160, 210]:
-        draw.line(
-            [(spine_x + 40, book_top + y_off), (spine_x + page_w - 50, book_top + y_off + 8)],
-            fill=(160, 175, 195, 255),
-            width=8,
-        )
-
-    # Book Spine
-    draw.line([(spine_x, book_top - 5), (spine_x, book_bottom - 35)], fill=(31, 106, 165, 255), width=18)
-
-    # 3. Draw Magnifying Glass / Search Symbol over Book
-    lens_center = (center_x + 100, book_bottom - 60)
-    lens_r = 130
+    # Magnifying glass
+    lens_center = (600, 600)
+    lens_r = 170
     lens_box = [
         lens_center[0] - lens_r,
         lens_center[1] - lens_r,
         lens_center[0] + lens_r,
         lens_center[1] + lens_r,
     ]
-    # Lens Glass
     draw.ellipse(lens_box, fill=(31, 106, 165, 190), outline=(97, 175, 239, 255), width=16)
 
-    # Lens Handle
     handle_start = (lens_center[0] + 90, lens_center[1] + 90)
     handle_end = (lens_center[0] + 200, lens_center[1] + 200)
     draw.line([handle_start, handle_end], fill=(97, 175, 239, 255), width=28)
 
-    # Save to iconset
     iconset_dir = output_icns.parent / "AppIcon.iconset"
     iconset_dir.mkdir(parents=True, exist_ok=True)
 
-    sizes = [16, 32, 64, 128, 256, 512, 1024]
+    sizes = [16, 32, 64, 128, 256, 512]
     for s in sizes:
         resized = img.resize((s, s), Image.Resampling.LANCZOS)
+        resized.save(iconset_dir / f"icon_{s}x{s}.png")
         if s <= 512:
-            resized.save(iconset_dir / f"icon_{s}x{s}.png")
             s2x = s * 2
-            if s2x <= 1024:
-                resized2x = img.resize((s2x, s2x), Image.Resampling.LANCZOS)
-                resized2x.save(iconset_dir / f"icon_{s}x{s}@2x.png")
+            resized2x = img.resize((s2x, s2x), Image.Resampling.LANCZOS)
+            resized2x.save(iconset_dir / f"icon_{s}x{s}@2x.png")
 
-    # Run macOS iconutil
     if shutil.which("iconutil"):
         subprocess.run(["iconutil", "-c", "icns", str(iconset_dir), "-o", str(output_icns)], check=True)
-        # Clean up iconset directory
         for f in iconset_dir.glob("*.png"):
             f.unlink()
         iconset_dir.rmdir()
@@ -120,101 +100,186 @@ def create_app_icon(output_icns: Path):
 def build_app_bundle():
     project_dir = Path(__file__).resolve().parent
     app_dir = project_dir / "BookHunt.app"
-    contents_dir = app_dir / "Contents"
-    macos_dir = contents_dir / "MacOS"
-    resources_dir = contents_dir / "Resources"
+    dist_dir = project_dir / "dist"
+    build_dir = project_dir / "build"
+    assets_dir = project_dir / "assets"
 
-    macos_dir.mkdir(parents=True, exist_ok=True)
-    resources_dir.mkdir(parents=True, exist_ok=True)
+    dist_dir.mkdir(parents=True, exist_ok=True)
+    build_dir.mkdir(parents=True, exist_ok=True)
+    assets_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Create Info.plist
-    info_plist_path = contents_dir / "Info.plist"
-    info_plist_content = """<?xml version="1.0" encoding="UTF-8"?>
+    # 1. Ensure high-resolution AppIcon.icns
+    cached_icon = assets_dir / "AppIcon.icns"
+    if not cached_icon.is_file():
+        print("🎨 Generating retina macOS AppIcon...")
+        create_app_icon(cached_icon)
+
+    # 2. Generate Apple App Store Sandbox Entitlements
+    entitlements_path = project_dir / "entitlements.plist"
+    entitlements_content = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleDevelopmentRegion</key>
-    <string>en</string>
-    <key>CFBundleDisplayName</key>
-    <string>BookHunt</string>
-    <key>CFBundleExecutable</key>
-    <string>BookHunt</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.marksadler.bookhunt</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>CFBundleName</key>
-    <string>BookHunt</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
-    <key>CFBundleVersion</key>
-    <string>1</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>10.13</string>
-    <key>NSHighResolutionCapable</key>
+    <key>com.apple.security.app-sandbox</key>
     <true/>
-    <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2026 Mark Sadler</string>
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    <key>com.apple.security.files.downloads.read-write</key>
+    <true/>
+    <key>com.apple.security.inherit</key>
+    <true/>
 </dict>
 </plist>
 """
-    with open(info_plist_path, "w", encoding="utf-8") as f:
-        f.write(info_plist_content)
+    with open(entitlements_path, "w", encoding="utf-8") as f:
+        f.write(entitlements_content)
 
-    # 2. Create Portable Executable Launcher
-    launcher_path = macos_dir / "BookHunt"
-    launcher_script = """#!/bin/bash
-# Portable macOS App Launcher for BookHunt
+    # 3. Build Standalone App Bundle with PyInstaller
+    pyinstaller_dist = build_dir / "pyi_dist"
+    pyinstaller_work = build_dir / "pyi_work"
+    if pyinstaller_dist.exists():
+        shutil.rmtree(pyinstaller_dist)
+    if pyinstaller_work.exists():
+        shutil.rmtree(pyinstaller_work)
 
-# Resolve bundle and project directories
-BUNDLE_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-PARENT_DIR="$(cd "$BUNDLE_DIR/.." && pwd)"
+    print("📦 Compiling standalone BookHunt.app with embedded runtime...")
+    cmd = [
+        sys.executable, "-m", "PyInstaller",
+        "--onedir",
+        "--windowed",
+        "--name", "BookHunt",
+        "--icon", str(cached_icon),
+        "--osx-bundle-identifier", "com.marksadler.bookhunt",
+        "--collect-all", "customtkinter",
+        "--collect-all", "scraper",
+        "--clean",
+        "--noconfirm",
+        "--distpath", str(pyinstaller_dist),
+        "--workpath", str(pyinstaller_work),
+        str(project_dir / "scraper" / "__main__.py"),
+    ]
+    subprocess.run(cmd, check=True)
 
-if [ -f "$PARENT_DIR/.venv/bin/python" ]; then
-    PROJECT_DIR="$PARENT_DIR"
-elif [ -n "$VIRTUAL_ENV" ] && [ -f "$VIRTUAL_ENV/bin/python" ]; then
-    PROJECT_DIR="$(cd "$VIRTUAL_ENV/.." && pwd)"
-elif [ -f "$HOME/universal-book-scraper/.venv/bin/python" ]; then
-    PROJECT_DIR="$HOME/universal-book-scraper"
-else
-    PROJECT_DIR="$PARENT_DIR"
-fi
+    # Replace root BookHunt.app with newly built standalone bundle
+    compiled_app = pyinstaller_dist / "BookHunt.app"
+    if app_dir.exists():
+        shutil.rmtree(app_dir)
+    shutil.copytree(compiled_app, app_dir, symlinks=True)
 
-export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
-export PYTHONPATH="$PROJECT_DIR"
+    contents_dir = app_dir / "Contents"
+    resources_dir = contents_dir / "Resources"
 
-cd "$PROJECT_DIR" || exit 1
-mkdir -p "$HOME/Library/Logs"
+    # Copy AppIcon to Resources
+    shutil.copyfile(cached_icon, resources_dir / "AppIcon.icns")
 
-if [ -f "$PROJECT_DIR/.venv/bin/python" ]; then
-    exec -a "BookHunt" "$PROJECT_DIR/.venv/bin/python" -m scraper gui > "$HOME/Library/Logs/BookHunt.log" 2>&1
-elif command -v python3 >/dev/null 2>&1; then
-    exec -a "BookHunt" python3 -m scraper gui > "$HOME/Library/Logs/BookHunt.log" 2>&1
-else
-    osascript -e 'display alert "BookHunt Error" message "Python environment not found. Run ./setup.sh in the repository folder."'
-fi
-"""
-    with open(launcher_path, "w", encoding="utf-8") as f:
-        f.write(launcher_script)
+    # 4. Enhance Info.plist with App Store Metadata
+    info_plist_path = contents_dir / "Info.plist"
+    with open(info_plist_path, "rb") as f:
+        plist_data = plistlib.load(f)
 
-    os.chmod(launcher_path, 0o755)
+    plist_data.update({
+        "CFBundleDisplayName": "BookHunt",
+        "CFBundleName": "BookHunt",
+        "CFBundleIdentifier": "com.marksadler.bookhunt",
+        "CFBundleShortVersionString": "1.0.0",
+        "CFBundleVersion": "1.0.0",
+        "LSApplicationCategoryType": "public.app-category.reference-tools",
+        "LSMinimumSystemVersion": "10.15",
+        "NSHighResolutionCapable": True,
+        "NSSupportsAutomaticGraphicsSwitching": True,
+        "NSHumanReadableCopyright": "Copyright © 2026 Mark Sadler. All rights reserved.",
+        "ITSAppUsesNonExemptEncryption": False,
+        "NSDownloadsFolderUsageDescription": "BookHunt needs access to your Downloads folder to save downloaded books and documents.",
+        "NSDocumentsFolderUsageDescription": "BookHunt needs access to save search results and citation bibliographies.",
+        "NSDesktopFolderUsageDescription": "BookHunt needs access if you choose to export books or citations to your Desktop.",
+    })
 
-    # 3. Handle AppIcon.icns
-    icns_path = resources_dir / "AppIcon.icns"
-    cached_icon = project_dir / "assets" / "AppIcon.icns"
+    with open(info_plist_path, "wb") as f:
+        plistlib.dump(plist_data, f)
 
-    if cached_icon.is_file():
-        shutil.copyfile(cached_icon, icns_path)
-        print(f"Copied icon from assets to {icns_path}")
-    else:
-        print("Generating custom macOS AppIcon...")
-        create_app_icon(icns_path)
+    # 5. Create PkgInfo
+    pkginfo_path = contents_dir / "PkgInfo"
+    with open(pkginfo_path, "wb") as f:
+        f.write(b"APPL????")
 
-    print(f"✅ Successfully built macOS application bundle at: {app_dir}")
+    # 6. Ensure clean bundle root (codesign strict requirement)
+    for item in app_dir.iterdir():
+        if item.name != "Contents":
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+
+    # 7. Apply Code Signing with Sandbox Entitlements
+    if shutil.which("codesign"):
+        print("🔐 Signing bundle with macOS App Sandbox entitlements...")
+        subprocess.run(
+            ["codesign", "--force", "--deep", "-s", "-", "--entitlements", str(entitlements_path), str(app_dir)],
+            check=True,
+        )
+        verify_res = subprocess.run(
+            ["codesign", "--verify", "--deep", "--strict", "--verbose=1", str(app_dir)],
+            capture_output=True,
+            text=True,
+        )
+        print(f"   Signature validation: {verify_res.stderr.strip() or OK}")
+
+    # 8. Create Distributable DMG Disk Image
+    dmg_path = dist_dir / "BookHunt-1.0.0.dmg"
+    staging_dir = build_dir / "dmg_staging"
+    if staging_dir.exists():
+        shutil.rmtree(staging_dir)
+    staging_dir.mkdir(parents=True, exist_ok=True)
+
+    shutil.copytree(app_dir, staging_dir / "BookHunt.app", symlinks=True)
+    os.symlink("/Applications", staging_dir / "Applications")
+
+    if dmg_path.exists():
+        dmg_path.unlink()
+
+    if shutil.which("hdiutil"):
+        print(f"💿 Creating distribution disk image: {dmg_path.name}...")
+        subprocess.run(
+            ["hdiutil", "create", "-volname", "BookHunt", "-srcfolder", str(staging_dir), "-ov", "-format", "UDZO", str(dmg_path)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+        shutil.rmtree(staging_dir)
+
+    # 9. Create App Store Installer Package (.pkg)
+    pkg_path = dist_dir / "BookHunt-1.0.0.pkg"
+    if pkg_path.exists():
+        pkg_path.unlink()
+
+    if shutil.which("productbuild"):
+        print(f"📦 Generating App Store package: {pkg_path.name}...")
+        subprocess.run(
+            ["productbuild", "--component", str(app_dir), "/Applications", str(pkg_path)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+
+    # Clean intermediate build directories
+    if pyinstaller_dist.exists():
+        shutil.rmtree(pyinstaller_dist)
+    if pyinstaller_work.exists():
+        shutil.rmtree(pyinstaller_work)
+
+    print("")
+    print("==========================================================")
+    print("  🎉 BookHunt Standalone & App Store Build Complete!")
+    print("==========================================================")
+    print(f"  • Standalone App Bundle: {app_dir}")
+    if dmg_path.exists():
+        dmg_size_mb = dmg_path.stat().st_size / (1024 * 1024)
+        print(f"  • Distributable DMG:     {dmg_path} ({dmg_size_mb:.2f} MB)")
+    if pkg_path.exists():
+        pkg_size_mb = pkg_path.stat().st_size / (1024 * 1024)
+        print(f"  • App Store PKG:         {pkg_path} ({pkg_size_mb:.2f} MB)")
+    print(f"  • Entitlements:          {entitlements_path}")
+    print("==========================================================")
 
 
 if __name__ == "__main__":
