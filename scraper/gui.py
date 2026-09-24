@@ -5,6 +5,20 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+
+# Configure macOS application menu title (Finder bar next to Apple logo)
+if sys.platform == "darwin":
+    try:
+        from Foundation import NSBundle, NSProcessInfo
+        NSProcessInfo.processInfo().setProcessName_("BookHunt")
+        bundle = NSBundle.mainBundle()
+        if bundle:
+            info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
+            if info is not None:
+                info["CFBundleName"] = "BookHunt"
+                info["CFBundleDisplayName"] = "BookHunt"
+    except Exception:
+        pass
 import threading
 import webbrowser
 import tkinter as tk
@@ -98,7 +112,11 @@ class BookHuntGUI(ctk.CTk):
     theme_menu: ctk.CTkOptionMenu = None  # type: ignore
 
     def __init__(self):
-        super().__init__()
+        super().__init__(className="BookHunt")
+        try:
+            self.tk.call("tk", "appname", "BookHunt")
+        except Exception:
+            pass
 
         self.title("BookHunt - Universal eBook & PDF Scraper")
         self.geometry("1120x740")

@@ -21,4 +21,4 @@ if [ ! -f "$PYTHON_EXEC" ]; then
     fi
 fi
 
-PYTHONPATH="$DIR" exec "$PYTHON_EXEC" -m scraper "$@"
+PYTHONPATH="$DIR" exec -a "BookHunt" "$PYTHON_EXEC" -m scraper "$@"

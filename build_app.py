@@ -191,9 +191,9 @@ cd "$PROJECT_DIR" || exit 1
 mkdir -p "$HOME/Library/Logs"
 
 if [ -f "$PROJECT_DIR/.venv/bin/python" ]; then
-    exec "$PROJECT_DIR/.venv/bin/python" -m scraper gui > "$HOME/Library/Logs/BookHunt.log" 2>&1
+    exec -a "BookHunt" "$PROJECT_DIR/.venv/bin/python" -m scraper gui > "$HOME/Library/Logs/BookHunt.log" 2>&1
 elif command -v python3 >/dev/null 2>&1; then
-    exec python3 -m scraper gui > "$HOME/Library/Logs/BookHunt.log" 2>&1
+    exec -a "BookHunt" python3 -m scraper gui > "$HOME/Library/Logs/BookHunt.log" 2>&1
 else
     osascript -e 'display alert "BookHunt Error" message "Python environment not found. Run ./setup.sh in the repository folder."'
 fi
