@@ -134,6 +134,9 @@ class BookHuntGUI(ctk.CTk):
         self._build_ui()
 
     def _build_ui(self):
+        # Build Native macOS / Cross-platform Menu Bar (removes default Tk "Run Widget Demo")
+        self._build_menu_bar()
+
         # Main Tabview
         self.tabview = ctk.CTkTabview(self)
         self.tabview.pack(fill="both", expand=True, padx=12, pady=12)
@@ -145,6 +148,109 @@ class BookHuntGUI(ctk.CTk):
         self._build_search_tab()
         self._build_dork_tab()
         self._build_settings_tab()
+
+    def _build_menu_bar(self):
+        menubar = tk.Menu(self)
+
+        # 1. File Menu
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(
+            label="New Search",
+            accelerator="Cmd+N" if sys.platform == "darwin" else "Ctrl+N",
+            command=self._focus_search,
+        )
+        file_menu.add_command(
+            label="Open Downloads Folder...",
+            accelerator="Cmd+O" if sys.platform == "darwin" else "Ctrl+O",
+            command=lambda: webbrowser.open(str(Path(self.download_dir).as_uri())),
+        )
+        file_menu.add_separator()
+        file_menu.add_command(
+            label="Close Window",
+            accelerator="Cmd+W" if sys.platform == "darwin" else "Ctrl+W",
+            command=self.destroy,
+        )
+        menubar.add_cascade(label="File", menu=file_menu)
+
+        # 2. Edit Menu (standard clipboard operations for text inputs)
+        edit_menu = tk.Menu(menubar, tearoff=0)
+        edit_menu.add_command(
+            label="Cut",
+            accelerator="Cmd+X" if sys.platform == "darwin" else "Ctrl+X",
+            command=lambda: self.focus_get().event_generate("<<Cut>>") if self.focus_get() else None,
+        )
+        edit_menu.add_command(
+            label="Copy",
+            accelerator="Cmd+C" if sys.platform == "darwin" else "Ctrl+C",
+            command=lambda: self.focus_get().event_generate("<<Copy>>") if self.focus_get() else None,
+        )
+        edit_menu.add_command(
+            label="Paste",
+            accelerator="Cmd+V" if sys.platform == "darwin" else "Ctrl+V",
+            command=lambda: self.focus_get().event_generate("<<Paste>>") if self.focus_get() else None,
+        )
+        edit_menu.add_command(
+            label="Select All",
+            accelerator="Cmd+A" if sys.platform == "darwin" else "Ctrl+A",
+            command=lambda: self.focus_get().event_generate("<<SelectAll>>") if self.focus_get() else None,
+        )
+        menubar.add_cascade(label="Edit", menu=edit_menu)
+
+        # 3. View Menu
+        view_menu = tk.Menu(menubar, tearoff=0)
+        view_menu.add_command(
+            label="Search & Download",
+            accelerator="Cmd+1" if sys.platform == "darwin" else "Ctrl+1",
+            command=lambda: self.tabview.set("🔍 Search & Download"),
+        )
+        view_menu.add_command(
+            label="Dorking Studio",
+            accelerator="Cmd+2" if sys.platform == "darwin" else "Ctrl+2",
+            command=lambda: self.tabview.set("🎯 Dorking Studio"),
+        )
+        view_menu.add_command(
+            label="Settings",
+            accelerator="Cmd+3" if sys.platform == "darwin" else "Ctrl+3",
+            command=lambda: self.tabview.set("⚙️ Settings"),
+        )
+        menubar.add_cascade(label="View", menu=view_menu)
+
+        # 4. Help Menu
+        help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(
+            label="GitHub Repository",
+            command=lambda: webbrowser.open("https://github.com/universal-book-scraper"),
+        )
+        help_menu.add_command(
+            label="About BookHunt",
+            command=self._show_about_dialog,
+        )
+        menubar.add_cascade(label="Help", menu=help_menu)
+
+        # Configure menu on root window (replaces default Tk File -> Run Widget Demo)
+        self.config(menu=menubar)
+
+        # Keyboard shortcuts
+        if sys.platform == "darwin":
+            self.bind_all("<Command-n>", lambda e: self._focus_search())
+            self.bind_all("<Command-w>", lambda e: self.destroy())
+            self.bind_all("<Command-Key-1>", lambda e: self.tabview.set("🔍 Search & Download"))
+            self.bind_all("<Command-Key-2>", lambda e: self.tabview.set("🎯 Dorking Studio"))
+            self.bind_all("<Command-Key-3>", lambda e: self.tabview.set("⚙️ Settings"))
+
+    def _focus_search(self):
+        self.tabview.set("🔍 Search & Download")
+        if hasattr(self, "search_entry") and self.search_entry:
+            self.search_entry.focus_set()
+            self.search_entry.select_range(0, "end")
+
+    def _show_about_dialog(self):
+        messagebox.showinfo(
+            "About BookHunt",
+            "BookHunt - Universal eBook & PDF Scraper\nVersion 1.0.0\n\n"
+            "High-performance multi-provider research & book search application.\n"
+            "Copyright © 2026 Mark Sadler",
+        )
 
     # -------------------------------------------------------------
     # TAB 1: Search & Download
