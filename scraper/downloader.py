@@ -2,9 +2,11 @@
 
 import os
 import re
+import time
+import threading
 import urllib.parse
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 import httpx
 from bs4 import BeautifulSoup
 from rich.progress import (
@@ -81,8 +83,17 @@ class Downloader:
         item: ResourceItem,
         custom_filename: Optional[str] = None,
         progress: Optional[Progress] = None,
+        progress_callback: Optional[Callable[[int, Optional[int], float], None]] = None,
+        cancel_event: Optional[threading.Event] = None,
     ) -> Tuple[bool, str]:
         """Downloads a single ResourceItem to the target directory with smart resolution for Archive.org and landing pages.
+
+        Args:
+            item: ResourceItem to download.
+            custom_filename: Optional override filename.
+            progress: Optional Rich Progress instance for CLI.
+            progress_callback: Optional callback(downloaded_bytes, total_bytes, speed_bytes_per_sec) for GUI progress.
+            cancel_event: Optional threading.Event to abort download.
 
         Returns:
             (success: bool, local_path_or_error_message: str)
@@ -112,6 +123,8 @@ class Downloader:
         if dest_path.exists():
             existing_size = dest_path.stat().st_size
             if item.size_bytes and existing_size == item.size_bytes and existing_size > 0:
+                if progress_callback:
+                    progress_callback(existing_size, existing_size, 0.0)
                 return True, f"Already downloaded: {dest_path.name}"
             # Only send Range if file is partially downloaded and non-zero
             if existing_size > 0:
@@ -119,6 +132,9 @@ class Downloader:
 
         try:
             async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+                if cancel_event and cancel_event.is_set():
+                    return False, "Download cancelled."
+
                 resp = await client.send(
                     client.build_request("GET", target_url, headers=headers),
                     stream=True,
@@ -189,16 +205,41 @@ class Downloader:
                     )
 
                 mode = "ab" if resp.status_code == 206 and existing_size > 0 else "wb"
+                completed_bytes = existing_size
+                t_start = time.time()
+                last_cb_time = 0.0
+
+                if progress_callback:
+                    progress_callback(completed_bytes, total_bytes, 0.0)
+
                 with open(dest_path, mode) as f:
                     async for chunk in resp.aiter_bytes(chunk_size=65536):
+                        if cancel_event and cancel_event.is_set():
+                            await resp.aclose()
+                            return False, "Download cancelled by user."
+
                         f.write(chunk)
+                        completed_bytes += len(chunk)
+
                         if progress and task_id is not None:
                             progress.update(task_id, advance=len(chunk))
+
+                        now = time.time()
+                        if progress_callback and (now - last_cb_time >= 0.05 or (total_bytes and completed_bytes >= total_bytes)):
+                            elapsed = now - t_start
+                            speed = (completed_bytes - existing_size) / elapsed if elapsed > 0.05 else 0.0
+                            progress_callback(completed_bytes, total_bytes, speed)
+                            last_cb_time = now
 
                 await resp.aclose()
 
                 if progress and task_id is not None:
                     progress.remove_task(task_id)
+
+                if progress_callback:
+                    elapsed = max(0.01, time.time() - t_start)
+                    speed = (completed_bytes - existing_size) / elapsed
+                    progress_callback(completed_bytes, total_bytes or completed_bytes, speed)
 
                 return True, str(dest_path)
 
@@ -208,8 +249,10 @@ class Downloader:
     async def download_multiple(
         self,
         items: List[ResourceItem],
+        item_progress_callback: Optional[Callable[[int, int, ResourceItem, int, Optional[int], float], None]] = None,
+        cancel_event: Optional[threading.Event] = None,
     ) -> List[Tuple[ResourceItem, bool, str]]:
-        """Downloads a collection of items sequentially with an active Rich progress bar."""
+        """Downloads a collection of items sequentially with an active Rich progress bar or GUI callbacks."""
         results = []
 
         with Progress(
@@ -219,8 +262,22 @@ class Downloader:
             TransferSpeedColumn(),
             TimeRemainingColumn(),
         ) as progress:
-            for item in items:
-                success, msg = await self.download_item(item, progress=progress)
+            total_items = len(items)
+            for idx, item in enumerate(items, 1):
+                if cancel_event and cancel_event.is_set():
+                    results.append((item, False, "Batch download cancelled."))
+                    break
+
+                def _cb(done_b: int, tot_b: Optional[int], spd: float, i=idx, it=item):
+                    if item_progress_callback:
+                        item_progress_callback(i, total_items, it, done_b, tot_b, spd)
+
+                success, msg = await self.download_item(
+                    item,
+                    progress=progress,
+                    progress_callback=_cb if item_progress_callback else None,
+                    cancel_event=cancel_event,
+                )
                 results.append((item, success, msg))
 
         return results

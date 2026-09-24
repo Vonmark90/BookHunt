@@ -77,7 +77,15 @@ class BookHuntGUI(ctk.CTk):
 
     lbl_status: ctk.CTkLabel = None  # type: ignore
     progress_bar: ctk.CTkProgressBar = None  # type: ignore
+    lbl_progress_pct: ctk.CTkLabel = None  # type: ignore
     btn_export: ctk.CTkOptionMenu = None  # type: ignore
+    dl_hud: ctk.CTkFrame = None  # type: ignore
+    hud_lbl_title: ctk.CTkLabel = None  # type: ignore
+    hud_btn_cancel: ctk.CTkButton = None  # type: ignore
+    hud_progress_bar: ctk.CTkProgressBar = None  # type: ignore
+    hud_lbl_size: ctk.CTkLabel = None  # type: ignore
+    hud_lbl_speed: ctk.CTkLabel = None  # type: ignore
+    download_cancel_event: threading.Event = None  # type: ignore
     btn_download_all: ctk.CTkButton = None  # type: ignore
 
     # Dorking Studio UI elements
@@ -364,7 +372,50 @@ class BookHuntGUI(ctk.CTk):
         )
         self.detail_meta.pack(anchor="w", padx=12, pady=4)
 
-        self.detail_desc = ctk.CTkTextbox(detail_frame, height=140, font=("Helvetica", 11))
+        # Live Graphical Download Progress Card (shown during active downloads)
+        self.dl_hud = ctk.CTkFrame(
+            detail_frame, corner_radius=8, fg_color="#1e2227", border_width=1, border_color="#3a3f4b"
+        )
+        hud_header = ctk.CTkFrame(self.dl_hud, fg_color="transparent")
+        hud_header.pack(fill="x", padx=10, pady=(8, 2))
+
+        self.hud_lbl_title = ctk.CTkLabel(
+            hud_header, text="⬇️ Downloading...", font=("Helvetica", 12, "bold"), text_color="#61afef", anchor="w"
+        )
+        self.hud_lbl_title.pack(side="left", fill="x", expand=True)
+
+        self.hud_btn_cancel = ctk.CTkButton(
+            hud_header,
+            text="✕ Cancel",
+            width=65,
+            height=22,
+            font=("Helvetica", 10, "bold"),
+            fg_color="#e06c75",
+            hover_color="#be5046",
+            command=self.cancel_current_download,
+        )
+        self.hud_btn_cancel.pack(side="right")
+
+        self.hud_progress_bar = ctk.CTkProgressBar(
+            self.dl_hud, height=12, corner_radius=6, progress_color="#61afef", fg_color="#2c313a"
+        )
+        self.hud_progress_bar.set(0)
+        self.hud_progress_bar.pack(fill="x", padx=10, pady=(4, 2))
+
+        hud_stats = ctk.CTkFrame(self.dl_hud, fg_color="transparent")
+        hud_stats.pack(fill="x", padx=10, pady=(2, 8))
+
+        self.hud_lbl_size = ctk.CTkLabel(
+            hud_stats, text="0 B / ...", font=("Helvetica", 10), text_color="#abb2bf", anchor="w"
+        )
+        self.hud_lbl_size.pack(side="left")
+
+        self.hud_lbl_speed = ctk.CTkLabel(
+            hud_stats, text="0 KB/s", font=("Helvetica", 10), text_color="#98c379", anchor="e"
+        )
+        self.hud_lbl_speed.pack(side="right")
+
+        self.detail_desc = ctk.CTkTextbox(detail_frame, height=120, font=("Helvetica", 11))
         self.detail_desc.pack(fill="x", padx=12, pady=6)
         self.detail_desc.insert("1.0", "Description / Snippet will appear here.")
         self.detail_desc.configure(state="disabled")
@@ -427,9 +478,14 @@ class BookHuntGUI(ctk.CTk):
         )
         self.lbl_status.pack(side="left", padx=12, pady=8)
 
-        self.progress_bar = ctk.CTkProgressBar(bottom_bar, width=180)
+        self.progress_bar = ctk.CTkProgressBar(bottom_bar, width=190, height=14, corner_radius=7, progress_color="#61afef")
         self.progress_bar.set(0)
-        self.progress_bar.pack(side="left", padx=12, pady=8)
+        self.progress_bar.pack(side="left", padx=(12, 6), pady=8)
+
+        self.lbl_progress_pct = ctk.CTkLabel(
+            bottom_bar, text="", font=("Helvetica", 11, "bold"), text_color="#61afef", width=42, anchor="w"
+        )
+        self.lbl_progress_pct.pack(side="left", padx=(0, 8), pady=8)
 
         # Batch Download & Export buttons
         self.btn_export = ctk.CTkOptionMenu(
@@ -809,24 +865,91 @@ class BookHuntGUI(ctk.CTk):
         self.btn_copy_citation.configure(state="disabled")
 
     # -------------------------------------------------------------
-    # Download Actions
+    # Download Actions & Graphical Progress
     # -------------------------------------------------------------
+    @staticmethod
+    def _format_bytes(n: float | int) -> str:
+        if not n or n <= 0:
+            return "0 B"
+        for unit in ["B", "KB", "MB", "GB"]:
+            if abs(n) < 1024.0:
+                return f"{n:.1f} {unit}" if unit != "B" else f"{int(n)} B"
+            n /= 1024.0
+        return f"{n:.1f} TB"
+
+    def cancel_current_download(self):
+        if self.download_cancel_event and not self.download_cancel_event.is_set():
+            self.download_cancel_event.set()
+            self.lbl_status.configure(text="Cancelling download...")
+            self.hud_lbl_size.configure(text="Cancelling...")
+
+    def _update_download_progress(self, completed: int, total: int | None, speed: float, title: str):
+        if not self.is_downloading:
+            return
+
+        speed_str = f"⚡ {self._format_bytes(speed)}/s"
+
+        if total and total > 0:
+            pct = min(1.0, max(0.0, completed / total))
+            pct_int = int(pct * 100)
+            size_str = f"{self._format_bytes(completed)} / {self._format_bytes(total)}"
+            eta_secs = int((total - completed) / speed) if speed > 1024 else None
+            eta_str = f" • ETA: {eta_secs}s" if eta_secs is not None and eta_secs < 3600 else ""
+
+            self.hud_progress_bar.set(pct)
+            self.progress_bar.set(pct)
+            self.lbl_progress_pct.configure(text=f"{pct_int}%")
+            self.hud_lbl_size.configure(text=f"{pct_int}% ({size_str})")
+            self.hud_lbl_speed.configure(text=f"{speed_str}{eta_str}")
+            self.lbl_status.configure(
+                text=f"Downloading '{title[:26]}...' • {pct_int}% ({size_str}) • {self._format_bytes(speed)}/s"
+            )
+        else:
+            size_str = f"{self._format_bytes(completed)} downloaded"
+            self.hud_lbl_size.configure(text=size_str)
+            self.hud_lbl_speed.configure(text=speed_str)
+            self.lbl_progress_pct.configure(text="")
+            self.lbl_status.configure(
+                text=f"Downloading '{title[:28]}...' • {size_str} • {self._format_bytes(speed)}/s"
+            )
+
     def download_selected(self):
         if not self.selected_item or self.is_downloading:
             return
 
         item = self.selected_item
         self.is_downloading = True
+        self.download_cancel_event = threading.Event()
+
+        # Show graphical download HUD in inspector
+        self.dl_hud.pack(fill="x", padx=12, pady=(4, 6), before=self.detail_desc)
+        self.hud_lbl_title.configure(text=f"⬇️ Downloading [{item.format}]...")
+        self.hud_progress_bar.set(0)
+        self.hud_lbl_size.configure(text="Connecting to server...")
+        self.hud_lbl_speed.configure(text="0 KB/s")
+        self.hud_btn_cancel.configure(state="normal", text="✕ Cancel")
+
         self.btn_download_one.configure(state="disabled", text="Downloading...")
-        self.lbl_status.configure(text=f"Downloading '{item.title[:35]}...'")
-        self.progress_bar.start()
+        self.btn_download_all.configure(state="disabled")
+        self.lbl_status.configure(text=f"Connecting to host for '{item.title[:30]}...'")
+        self.progress_bar.set(0)
+        self.lbl_progress_pct.configure(text="0%")
+
+        def _progress_cb(done: int, total: int | None, speed: float):
+            self.after(0, self._update_download_progress, done, total, speed, item.title)
 
         def _worker():
             downloader = Downloader(download_dir=self.download_dir)
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                success, path_or_err = loop.run_until_complete(downloader.download_item(item))
+                success, path_or_err = loop.run_until_complete(
+                    downloader.download_item(
+                        item,
+                        progress_callback=_progress_cb,
+                        cancel_event=self.download_cancel_event,
+                    )
+                )
                 self.after(0, self._on_download_one_complete, success, path_or_err)
             finally:
                 loop.close()
@@ -836,15 +959,40 @@ class BookHuntGUI(ctk.CTk):
     def _on_download_one_complete(self, success: bool, msg: str):
         self.is_downloading = False
         self.btn_download_one.configure(state="normal", text="📥 Download Selected")
-        self.progress_bar.stop()
+        if self.results:
+            self.btn_download_all.configure(state="normal")
+        self.dl_hud.pack_forget()
         self.progress_bar.set(0)
+        self.lbl_progress_pct.configure(text="")
 
         if success:
             self.lbl_status.configure(text=f"Saved to: {Path(msg).name}")
             messagebox.showinfo("Download Complete", f"File saved successfully:\n{msg}")
+        elif "cancelled" in msg.lower():
+            self.lbl_status.configure(text="Download cancelled by user.")
         else:
             self.lbl_status.configure(text=f"Download failed: {msg}")
             messagebox.showerror("Download Failed", f"Could not download file:\n{msg}")
+
+    def _update_batch_progress(self, idx: int, total_items: int, item: ResourceItem, done: int, total: int | None, speed: float):
+        if not self.is_downloading:
+            return
+
+        item_pct = (done / total) if total and total > 0 else 0.0
+        overall_pct = min(1.0, max(0.0, ((idx - 1) + item_pct) / total_items))
+        overall_pct_int = int(overall_pct * 100)
+
+        self.hud_lbl_title.configure(text=f"⬇️ Batch [{idx}/{total_items}] [{item.format}]")
+        self.hud_progress_bar.set(item_pct)
+        self.progress_bar.set(overall_pct)
+        self.lbl_progress_pct.configure(text=f"{overall_pct_int}%")
+
+        size_str = f"{self._format_bytes(done)} / {self._format_bytes(total)}" if total else f"{self._format_bytes(done)}"
+        self.hud_lbl_size.configure(text=f"Item {idx}/{total_items}: {size_str}")
+        self.hud_lbl_speed.configure(text=f"⚡ {self._format_bytes(speed)}/s")
+        self.lbl_status.configure(
+            text=f"[{idx}/{total_items}] Downloading '{item.title[:24]}...' • Overall: {overall_pct_int}% • {self._format_bytes(speed)}/s"
+        )
 
     def download_all(self):
         if not self.results or self.is_downloading:
@@ -857,15 +1005,36 @@ class BookHuntGUI(ctk.CTk):
             return
 
         self.is_downloading = True
+        self.download_cancel_event = threading.Event()
         self.btn_download_all.configure(state="disabled", text="Downloading All...")
-        self.progress_bar.start()
+        self.btn_download_one.configure(state="disabled")
+
+        # Show graphical HUD
+        self.dl_hud.pack(fill="x", padx=12, pady=(4, 6), before=self.detail_desc)
+        self.hud_lbl_title.configure(text=f"⬇️ Batch Download (0/{len(self.results)})...")
+        self.hud_progress_bar.set(0)
+        self.hud_lbl_size.configure(text="Starting batch...")
+        self.hud_lbl_speed.configure(text="0 KB/s")
+        self.hud_btn_cancel.configure(state="normal", text="✕ Cancel")
+
+        self.progress_bar.set(0)
+        self.lbl_progress_pct.configure(text="0%")
+
+        def _item_cb(idx: int, total_items: int, item: ResourceItem, done: int, total: int | None, speed: float):
+            self.after(0, self._update_batch_progress, idx, total_items, item, done, total, speed)
 
         def _worker():
             downloader = Downloader(download_dir=self.download_dir)
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                res = loop.run_until_complete(downloader.download_multiple(self.results))
+                res = loop.run_until_complete(
+                    downloader.download_multiple(
+                        self.results,
+                        item_progress_callback=_item_cb,
+                        cancel_event=self.download_cancel_event,
+                    )
+                )
                 success_count = sum(1 for _, s, _ in res if s)
                 self.after(0, self._on_download_all_complete, success_count, len(self.results))
             finally:
@@ -876,8 +1045,11 @@ class BookHuntGUI(ctk.CTk):
     def _on_download_all_complete(self, succeeded: int, total: int):
         self.is_downloading = False
         self.btn_download_all.configure(state="normal", text="📥 Download All")
-        self.progress_bar.stop()
+        if self.selected_item:
+            self.btn_download_one.configure(state="normal")
+        self.dl_hud.pack_forget()
         self.progress_bar.set(0)
+        self.lbl_progress_pct.configure(text="")
 
         self.lbl_status.configure(text=f"Batch download finished: {succeeded}/{total} succeeded.")
         messagebox.showinfo(
