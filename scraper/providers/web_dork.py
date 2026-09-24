@@ -1,8 +1,9 @@
 """Dorking provider: searches the open web using Google/DuckDuckGo dorking patterns to find PDFs and eBooks."""
 
+from __future__ import annotations
+
 import re
 import urllib.parse
-from typing import List, Optional
 import httpx
 from bs4 import BeautifulSoup
 
@@ -13,11 +14,11 @@ from ..models import ResourceItem
 class WebDorkProvider(BaseProvider):
     """Searches open web engines using dork operators (filetype:pdf, ext:epub, intitle:index of, etc.)."""
 
-    name = "Web Dorking (DDG)"
-    supported_formats = ["PDF", "EPUB"]
+    name: str = "Web Dorking (DDG)"
+    supported_formats: list[str] = ["PDF", "EPUB"]
 
     # Multiple dorking templates to surface hidden documents, books, and open directories
-    DORK_TEMPLATES = [
+    DORK_TEMPLATES: list[tuple[str, str]] = [
         # Standard filetype targeting
         ("{query} (filetype:pdf OR filetype:epub)", "filetype:pdf/epub"),
         # Academic & university repositories
@@ -32,16 +33,13 @@ class WebDorkProvider(BaseProvider):
         self,
         query: str,
         limit: int = 20,
-        file_format: Optional[str] = None,
-    ) -> List[ResourceItem]:
-        results: List[ResourceItem] = []
-        seen_urls = set()
-
-        # Format filter customization
-        fmt_target = file_format.lower() if file_format else "pdf"
+        file_format: str | None = None,
+    ) -> list[ResourceItem]:
+        results: list[ResourceItem] = []
+        seen_urls: set[str] = set()
 
         # Select queries based on requested format
-        dorks_to_run = []
+        dorks_to_run: list[tuple[str, str]] = []
         if file_format and file_format.upper() == "EPUB":
             dorks_to_run.append((f"{query} filetype:epub", "filetype:epub"))
             dorks_to_run.append((f"intitle:\"index of\" epub \"{query}\"", "index-of (epub)"))
@@ -65,7 +63,7 @@ class WebDorkProvider(BaseProvider):
                         if item.download_url not in seen_urls:
                             seen_urls.add(item.download_url)
                             results.append(item)
-                except Exception as e:
+                except Exception:
                     # Continue gracefully if a query encounters a temporary block
                     continue
 
@@ -77,8 +75,8 @@ class WebDorkProvider(BaseProvider):
         search_query: str,
         dork_type: str,
         limit: int,
-    ) -> List[ResourceItem]:
-        items: List[ResourceItem] = []
+    ) -> list[ResourceItem]:
+        items: list[ResourceItem] = []
         url = "https://html.duckduckgo.com/html/"
         data = {"q": search_query, "b": ""}
 
@@ -102,7 +100,7 @@ class WebDorkProvider(BaseProvider):
             if not title_elem:
                 continue
 
-            raw_href = title_elem.get("href", "")
+            raw_href = str(title_elem.get("href", "") or "")
             title = title_elem.get_text(strip=True)
             snippet = snippet_elem.get_text(strip=True) if snippet_elem else ""
 
@@ -134,7 +132,7 @@ class WebDorkProvider(BaseProvider):
 
         return items
 
-    def _extract_target_url(self, href: str) -> Optional[str]:
+    def _extract_target_url(self, href: str) -> str | None:
         """Extracts the actual destination URL from a search engine redirect parameter."""
         if not href:
             return None
@@ -153,7 +151,7 @@ class WebDorkProvider(BaseProvider):
             return href
         return None
 
-    def _detect_format(self, url: str, title: str, snippet: str) -> Optional[str]:
+    def _detect_format(self, url: str, title: str, snippet: str) -> str | None:
         lower_url = url.lower()
         lower_title = title.lower()
         lower_snippet = snippet.lower()

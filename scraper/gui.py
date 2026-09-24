@@ -1,5 +1,7 @@
 """Native Desktop GUI for Universal eBook & PDF Scraper using CustomTkinter."""
 
+from __future__ import annotations
+
 import asyncio
 import os
 import sys
@@ -7,7 +9,6 @@ import threading
 import webbrowser
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-from typing import List, Optional
 from pathlib import Path
 
 import customtkinter as ctk
@@ -26,6 +27,68 @@ ctk.set_default_color_theme("blue")
 class BookHuntGUI(ctk.CTk):
     """Main desktop application window."""
 
+    scraper: UniversalScraper
+    results: list[ResourceItem]
+    selected_item: ResourceItem | None
+    is_searching: bool
+    is_downloading: bool
+    download_dir: str
+
+    tabview: ctk.CTkTabview = None  # type: ignore
+    tab_search: ctk.CTkFrame = None  # type: ignore
+    tab_dork: ctk.CTkFrame = None  # type: ignore
+    tab_settings: ctk.CTkFrame = None  # type: ignore
+
+    # Search & Download UI elements
+    search_entry: ctk.CTkEntry = None  # type: ignore
+    btn_search: ctk.CTkButton = None  # type: ignore
+    fmt_var: ctk.StringVar = None  # type: ignore
+    fmt_menu: ctk.CTkOptionMenu = None  # type: ignore
+    limit_var: ctk.StringVar = None  # type: ignore
+    limit_menu: ctk.CTkOptionMenu = None  # type: ignore
+
+    src_dork: ctk.CTkCheckBox = None  # type: ignore
+    src_archive: ctk.CTkCheckBox = None  # type: ignore
+    src_arxiv: ctk.CTkCheckBox = None  # type: ignore
+    src_gutenberg: ctk.CTkCheckBox = None  # type: ignore
+    src_openlib: ctk.CTkCheckBox = None  # type: ignore
+    src_standard: ctk.CTkCheckBox = None  # type: ignore
+    src_oapen: ctk.CTkCheckBox = None  # type: ignore
+    src_doab: ctk.CTkCheckBox = None  # type: ignore
+    src_openalex: ctk.CTkCheckBox = None  # type: ignore
+    src_hal: ctk.CTkCheckBox = None  # type: ignore
+    src_zenodo: ctk.CTkCheckBox = None  # type: ignore
+
+    site_entry: ctk.CTkEntry = None  # type: ignore
+    exclude_entry: ctk.CTkEntry = None  # type: ignore
+
+    tree: ttk.Treeview = None  # type: ignore
+    context_menu: tk.Menu = None  # type: ignore
+
+    detail_title: ctk.CTkLabel = None  # type: ignore
+    detail_meta: ctk.CTkLabel = None  # type: ignore
+    detail_desc: ctk.CTkTextbox = None  # type: ignore
+
+    btn_download_one: ctk.CTkButton = None  # type: ignore
+    btn_open_browser: ctk.CTkButton = None  # type: ignore
+    btn_copy_link: ctk.CTkButton = None  # type: ignore
+    btn_open_folder: ctk.CTkButton = None  # type: ignore
+    btn_copy_citation: ctk.CTkButton = None  # type: ignore
+
+    lbl_status: ctk.CTkLabel = None  # type: ignore
+    progress_bar: ctk.CTkProgressBar = None  # type: ignore
+    btn_export: ctk.CTkOptionMenu = None  # type: ignore
+    btn_download_all: ctk.CTkButton = None  # type: ignore
+
+    # Dorking Studio UI elements
+    dork_entry: ctk.CTkEntry = None  # type: ignore
+    dork_scroll: ctk.CTkScrollableFrame = None  # type: ignore
+    lbl_dork_empty: ctk.CTkLabel = None  # type: ignore
+
+    # Settings UI elements
+    lbl_dl_path: ctk.CTkEntry = None  # type: ignore
+    theme_menu: ctk.CTkOptionMenu = None  # type: ignore
+
     def __init__(self):
         super().__init__()
 
@@ -35,8 +98,8 @@ class BookHuntGUI(ctk.CTk):
 
         # Application state
         self.scraper = UniversalScraper()
-        self.results: List[ResourceItem] = []
-        self.selected_item: Optional[ResourceItem] = None
+        self.results = []
+        self.selected_item = None
         self.is_searching = False
         self.is_downloading = False
         self.download_dir = str(Path.home() / "Downloads" / "BookHunt")
@@ -481,7 +544,7 @@ class BookHuntGUI(ctk.CTk):
             return
 
         # Determine enabled sources
-        enabled_sources = []
+        enabled_sources: list[str] = []
         if self.src_dork.get():
             enabled_sources.append("web_dork")
         if self.src_archive.get():
@@ -635,7 +698,7 @@ class BookHuntGUI(ctk.CTk):
         self._populate_table()
         self._reset_inspector()
 
-    def _show_context_menu(self, event):
+    def _show_context_menu(self, event: tk.Event) -> None:
         item_id = self.tree.identify_row(event.y)
         if item_id:
             self.tree.selection_set(item_id)
@@ -675,7 +738,7 @@ class BookHuntGUI(ctk.CTk):
             webbrowser.open(str(Path(self.download_dir).as_uri()))
             self.lbl_status.configure(text=f"Opened download folder: {self.download_dir}")
 
-    def _on_search_complete(self, items: List[ResourceItem], error: Optional[str]):
+    def _on_search_complete(self, items: list[ResourceItem], error: str | None = None) -> None:
         self.is_searching = False
         self.btn_search.configure(state="normal", text="Search Everywhere")
         self.progress_bar.stop()
@@ -696,7 +759,7 @@ class BookHuntGUI(ctk.CTk):
         self.btn_download_all.configure(state="normal")
         self._populate_table()
 
-    def _on_tree_select(self, event):
+    def _on_tree_select(self, event: tk.Event | None = None) -> None:
         selected = self.tree.selection()
         if not selected:
             self._reset_inspector()

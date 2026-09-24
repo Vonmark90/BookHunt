@@ -1,8 +1,9 @@
 """arXiv academic repository provider for scientific books, papers, and surveys."""
 
+from __future__ import annotations
+
 import re
 import warnings
-from typing import List, Optional
 import httpx
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 
@@ -15,20 +16,20 @@ from ..models import ResourceItem
 class ArxivProvider(BaseProvider):
     """Searches arXiv for academic papers, monographs, surveys, and research publications."""
 
-    name = "arXiv"
-    supported_formats = ["PDF"]
+    name: str = "arXiv"
+    supported_formats: list[str] = ["PDF"]
 
     async def search(
         self,
         query: str,
         limit: int = 15,
-        file_format: Optional[str] = None,
-    ) -> List[ResourceItem]:
+        file_format: str | None = None,
+    ) -> list[ResourceItem]:
         # If user explicitly requested only EPUB, arXiv doesn't provide EPUB
         if file_format and file_format.upper() != "PDF":
             return []
 
-        items: List[ResourceItem] = []
+        items: list[ResourceItem] = []
         clean_q = re.sub(r"[^\w\s]", " ", query).strip()
         params = {
             "search_query": f"all:{clean_q}",
@@ -52,7 +53,11 @@ class ArxivProvider(BaseProvider):
                     title_elem = entry.find("title")
                     title = title_elem.get_text(strip=True).replace("\n", " ") if title_elem else "Untitled"
 
-                    authors = [a.find("name").get_text(strip=True) for a in entry.find_all("author") if a.find("name")]
+                    authors: list[str] = []
+                    for a in entry.find_all("author"):
+                        name_elem = a.find("name")
+                        if name_elem:
+                            authors.append(name_elem.get_text(strip=True))
 
                     published_elem = entry.find("published")
                     year = None
@@ -65,13 +70,15 @@ class ArxivProvider(BaseProvider):
                     summary = summary_elem.get_text(strip=True).replace("\n", " ") if summary_elem else ""
 
                     # Find PDF link
-                    pdf_link = None
-                    alt_link = None
+                    pdf_link: str | None = None
+                    alt_link: str | None = None
                     for link in entry.find_all("link"):
+                        raw_href = link.get("href")
+                        href_str = str(raw_href) if raw_href else None
                         if link.get("title") == "pdf" or link.get("type") == "application/pdf":
-                            pdf_link = link.get("href")
+                            pdf_link = href_str
                         elif link.get("rel") == "alternate":
-                            alt_link = link.get("href")
+                            alt_link = href_str
 
                     if not pdf_link and alt_link:
                         # Convert arxiv.org/abs/... to arxiv.org/pdf/...

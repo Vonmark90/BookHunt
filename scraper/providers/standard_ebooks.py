@@ -1,8 +1,9 @@
 """Standard Ebooks provider for high-quality public-domain EPUB eBooks."""
 
+from __future__ import annotations
+
 import re
 import warnings
-from typing import List, Optional
 import httpx
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 
@@ -15,20 +16,20 @@ from ..models import ResourceItem
 class StandardEbooksProvider(BaseProvider):
     """Searches Standard Ebooks catalog of beautifully formatted, open-access EPUBs."""
 
-    name = "Standard Ebooks"
-    supported_formats = ["EPUB"]
+    name: str = "Standard Ebooks"
+    supported_formats: list[str] = ["EPUB"]
 
     async def search(
         self,
         query: str,
         limit: int = 15,
-        file_format: Optional[str] = None,
-    ) -> List[ResourceItem]:
+        file_format: str | None = None,
+    ) -> list[ResourceItem]:
         # Standard Ebooks focuses strictly on EPUB / eBook formats
         if file_format and file_format.upper() not in ["EPUB", "ALL"]:
             return []
 
-        items: List[ResourceItem] = []
+        items: list[ResourceItem] = []
         url = "https://standardebooks.org/feeds/opds/all"
         params = {"query": query}
 
@@ -45,11 +46,11 @@ class StandardEbooksProvider(BaseProvider):
                     title_elem = entry.find("title")
                     title = title_elem.get_text(strip=True) if title_elem else "Untitled"
 
-                    authors = [
-                        a.find("name").get_text(strip=True)
-                        for a in entry.find_all("author")
-                        if a.find("name")
-                    ]
+                    authors: list[str] = []
+                    for a in entry.find_all("author"):
+                        name_elem = a.find("name")
+                        if name_elem:
+                            authors.append(name_elem.get_text(strip=True))
 
                     # Published year
                     published_elem = (
@@ -71,14 +72,17 @@ class StandardEbooksProvider(BaseProvider):
                     )
 
                     # Links
-                    epub_url = None
-                    size_bytes = None
-                    details_url = None
+                    epub_url: str | None = None
+                    size_bytes: int | None = None
+                    details_url: str | None = None
 
                     for link in entry.find_all("link"):
-                        href = link.get("href", "")
-                        rel = link.get("rel", "")
-                        link_type = link.get("type", "")
+                        raw_href = link.get("href", "")
+                        href = str(raw_href) if raw_href else ""
+                        raw_rel = link.get("rel", "")
+                        rel = str(raw_rel) if raw_rel else ""
+                        raw_type = link.get("type", "")
+                        link_type = str(raw_type) if raw_type else ""
 
                         if rel == "alternate" and not details_url:
                             details_url = href
@@ -86,8 +90,10 @@ class StandardEbooksProvider(BaseProvider):
                         if "epub" in link_type and "advanced" not in href and "kepub" not in href:
                             epub_url = href
                             length = link.get("length")
-                            if length and length.isdigit():
-                                size_bytes = int(length)
+                            if length:
+                                length_str = str(length)
+                                if length_str.isdigit():
+                                    size_bytes = int(length_str)
 
                     if not epub_url:
                         continue
