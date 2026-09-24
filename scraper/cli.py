@@ -1,14 +1,13 @@
 """Rich Interactive Command Line Interface for Universal eBook & PDF Scraper."""
 
+from __future__ import annotations
+
 import asyncio
-import sys
 from pathlib import Path
-from typing import List, Optional
 import click
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 from .models import ResourceItem
 from .engine import UniversalScraper
@@ -19,7 +18,7 @@ from .dorker import DorkGenerator
 console = Console()
 
 
-def display_results_table(items: List[ResourceItem], topic: str) -> None:
+def display_results_table(items: list[ResourceItem], topic: str) -> None:
     """Renders a formatted table of search results in the terminal."""
     table = Table(
         title=f"[bold cyan]Discovered Resources for:[/bold cyan] [yellow]\"{topic}\"[/yellow] ({len(items)} found)",
@@ -53,7 +52,7 @@ def display_results_table(items: List[ResourceItem], topic: str) -> None:
     console.print(table)
 
 
-async def interactive_selection_loop(items: List[ResourceItem], download_dir: str) -> None:
+async def interactive_selection_loop(items: list[ResourceItem], download_dir: str) -> None:
     """Interactive loop allowing the user to inspect or download items."""
     downloader = Downloader(download_dir=download_dir)
 
@@ -88,7 +87,7 @@ async def interactive_selection_loop(items: List[ResourceItem], download_dir: st
                     console.print("[bold red]Invalid item index.[/bold red]")
             continue
 
-        selected_indices = []
+        selected_indices: list[int] = []
         if choice.lower() == "all":
             selected_indices = list(range(len(items)))
         else:
@@ -136,7 +135,7 @@ def cli():
 @click.argument("topic", required=True)
 @click.option("--format", "-f", "file_format", type=click.Choice(["pdf", "epub", "all"], case_sensitive=False), default="all", help="Target document format")
 @click.option("--limit", "-l", default=10, help="Results limit per source provider")
-@click.option("--sources", "-s", default="all", help="Comma-separated sources: dork,archive,gutenberg,arxiv,openlib,standard,oapen,hal,zenodo, or 'all'")
+@click.option("--sources", "-s", default="all", help="Comma-separated sources: dork,archive,gutenberg,arxiv,openlib,standard,oapen,hal,zenodo,doab,openalex, or 'all'")
 @click.option("--validate", "-v", is_flag=True, default=False, help="Perform HEAD requests to verify active links and file sizes")
 @click.option("--download", "-d", is_flag=True, default=False, help="Download all discovered resources immediately")
 @click.option("--interactive/--no-interactive", "-i", default=True, help="Enter interactive download selection mode")
@@ -150,7 +149,7 @@ def search(
     validate: bool,
     download: bool,
     interactive: bool,
-    output: Optional[str],
+    output: str | None,
     out_dir: str,
 ):
     """Search for eBooks, PDFs, and documents across digital archives and web dorks."""
@@ -163,12 +162,15 @@ def search(
         "gutenberg": "gutenberg",
         "arxiv": "arxiv",
         "openlib": "open_library",
+        "open_library": "open_library",
         "standard": "standard_ebooks",
         "standard_ebooks": "standard_ebooks",
         "oapen": "oapen",
         "hal": "hal_science",
         "hal_science": "hal_science",
         "zenodo": "zenodo",
+        "doab": "doab",
+        "openalex": "openalex",
     }
     
     enabled_sources = None

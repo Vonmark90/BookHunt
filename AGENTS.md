@@ -30,11 +30,13 @@ universal-book-scraper/
     └── providers/          # Source-specific search providers
         ├── base.py         # BaseProvider abstract class & default headers
         ├── arxiv.py        # arXiv API provider
+        ├── doab.py         # DOAB (Directory of Open Access Books) provider
         ├── gutendex.py     # Project Gutenberg provider
         ├── hal_science.py  # HAL Science open repository provider
         ├── internet_archive.py # Internet Archive search provider
         ├── oapen.py        # OAPEN open access books provider
         ├── open_library.py # Open Library curated editions provider
+        ├── openalex.py     # OpenAlex open access books & monographs provider
         ├── standard_ebooks.py # Standard Ebooks feed provider
         ├── web_dork.py     # DuckDuckGo HTML dork scraping provider
         └── zenodo.py       # CERN Zenodo research repository provider

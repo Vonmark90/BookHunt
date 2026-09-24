@@ -87,71 +87,120 @@ class BookHuntGUI(ctk.CTk):
         self.btn_search.pack(side="left", padx=(0, 12), pady=10)
 
         # 2. Filters Bar
-        filter_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        filter_frame.pack(fill="x", padx=8, pady=(0, 8))
+        # 2. Filters & Controls
+        filter_container = ctk.CTkFrame(parent, fg_color="transparent")
+        filter_container.pack(fill="x", padx=8, pady=(0, 6))
 
-        # Format dropdown
-        ctk.CTkLabel(filter_frame, text="Format:", font=("Helvetica", 12, "bold")).pack(side="left", padx=(8, 4))
-        self.fmt_var = ctk.StringVar(value="All")
+        # Top Control Row: Format, Limit, and Quick Source Toggles
+        control_row = ctk.CTkFrame(filter_container, fg_color="transparent")
+        control_row.pack(fill="x", pady=(0, 4))
+
+        ctk.CTkLabel(control_row, text="Format:", font=("Helvetica", 12, "bold")).pack(side="left", padx=(4, 4))
+        self.fmt_var = ctk.StringVar(value="PDF")
         self.fmt_menu = ctk.CTkOptionMenu(
-            filter_frame,
+            control_row,
             values=["All", "PDF", "EPUB"],
             variable=self.fmt_var,
-            width=90,
-            height=28,
+            width=85,
+            height=26,
         )
         self.fmt_menu.pack(side="left", padx=(0, 16))
 
-        # Limit per source
-        ctk.CTkLabel(filter_frame, text="Limit/Source:", font=("Helvetica", 12)).pack(side="left", padx=(0, 4))
+        ctk.CTkLabel(control_row, text="Limit/Source:", font=("Helvetica", 12)).pack(side="left", padx=(0, 4))
         self.limit_var = ctk.StringVar(value="10")
         self.limit_menu = ctk.CTkOptionMenu(
-            filter_frame,
+            control_row,
             values=["5", "10", "15", "25"],
             variable=self.limit_var,
             width=70,
-            height=28,
+            height=26,
         )
         self.limit_menu.pack(side="left", padx=(0, 20))
 
-        # Source toggles
-        ctk.CTkLabel(filter_frame, text="Sources:", font=("Helvetica", 12, "bold")).pack(side="left", padx=(0, 6))
-        self.src_dork = ctk.CTkCheckBox(filter_frame, text="Web Dork", width=85)
+        # Quick select buttons on right
+        btn_clear_src = ctk.CTkButton(
+            control_row,
+            text="Clear Sources",
+            width=90,
+            height=24,
+            font=("Helvetica", 11),
+            fg_color="#3a3f4b",
+            hover_color="#4b5263",
+            command=self._clear_all_sources,
+        )
+        btn_clear_src.pack(side="right", padx=(4, 4))
+
+        btn_all_src = ctk.CTkButton(
+            control_row,
+            text="Select All",
+            width=80,
+            height=24,
+            font=("Helvetica", 11),
+            fg_color="#3a3f4b",
+            hover_color="#4b5263",
+            command=self._select_all_sources,
+        )
+        btn_all_src.pack(side="right", padx=4)
+
+        # Sources Row with all 11 providers
+        sources_row = ctk.CTkFrame(filter_container, fg_color="transparent")
+        sources_row.pack(fill="x", pady=(2, 0))
+
+        ctk.CTkLabel(sources_row, text="Sources:", font=("Helvetica", 12, "bold")).pack(side="left", padx=(4, 6))
+
+        self.src_dork = ctk.CTkCheckBox(sources_row, text="Web Dork", width=80)
         self.src_dork.select()
         self.src_dork.pack(side="left", padx=2)
 
-        self.src_archive = ctk.CTkCheckBox(filter_frame, text="Archive", width=70)
+        self.src_archive = ctk.CTkCheckBox(sources_row, text="Archive", width=68)
         self.src_archive.select()
         self.src_archive.pack(side="left", padx=2)
 
-        self.src_arxiv = ctk.CTkCheckBox(filter_frame, text="arXiv", width=60)
+        self.src_arxiv = ctk.CTkCheckBox(sources_row, text="arXiv", width=58)
         self.src_arxiv.select()
         self.src_arxiv.pack(side="left", padx=2)
 
-        self.src_gutenberg = ctk.CTkCheckBox(filter_frame, text="Gutenberg", width=85)
+        self.src_gutenberg = ctk.CTkCheckBox(sources_row, text="Gutenberg", width=80)
         self.src_gutenberg.select()
         self.src_gutenberg.pack(side="left", padx=2)
 
-        self.src_openlib = ctk.CTkCheckBox(filter_frame, text="OpenLib", width=75)
+        self.src_openlib = ctk.CTkCheckBox(sources_row, text="OpenLib", width=72)
         self.src_openlib.select()
         self.src_openlib.pack(side="left", padx=2)
 
-        self.src_standard = ctk.CTkCheckBox(filter_frame, text="Std Ebooks", width=90)
+        self.src_standard = ctk.CTkCheckBox(sources_row, text="Std Ebooks", width=85)
         self.src_standard.select()
         self.src_standard.pack(side="left", padx=2)
 
-        self.src_oapen = ctk.CTkCheckBox(filter_frame, text="OAPEN", width=70)
+        self.src_oapen = ctk.CTkCheckBox(sources_row, text="OAPEN", width=65)
         self.src_oapen.select()
         self.src_oapen.pack(side="left", padx=2)
 
-        self.src_hal = ctk.CTkCheckBox(filter_frame, text="HAL", width=55)
+        self.src_doab = ctk.CTkCheckBox(sources_row, text="DOAB", width=60)
+        self.src_doab.select()
+        self.src_doab.pack(side="left", padx=2)
+
+        self.src_openalex = ctk.CTkCheckBox(sources_row, text="OpenAlex", width=75)
+        self.src_openalex.select()
+        self.src_openalex.pack(side="left", padx=2)
+
+        self.src_hal = ctk.CTkCheckBox(sources_row, text="HAL", width=52)
         self.src_hal.select()
         self.src_hal.pack(side="left", padx=2)
 
-        self.src_zenodo = ctk.CTkCheckBox(filter_frame, text="Zenodo", width=70)
+        self.src_zenodo = ctk.CTkCheckBox(sources_row, text="Zenodo", width=68)
         self.src_zenodo.select()
         self.src_zenodo.pack(side="left", padx=2)
 
+        # Optional web-only refinements. Catalog providers continue to receive
+        # the unmodified topic, while the web search uses these operators.
+        refine_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        refine_frame.pack(fill="x", padx=16, pady=(0, 8))
+        ctk.CTkLabel(refine_frame, text="Web search refinements:", font=("Helvetica", 12, "bold")).pack(side="left", padx=(0, 8))
+        self.site_entry = ctk.CTkEntry(refine_frame, placeholder_text="Limit to site (e.g. edu, nasa.gov)", width=245, height=30)
+        self.site_entry.pack(side="left", padx=(0, 8))
+        self.exclude_entry = ctk.CTkEntry(refine_frame, placeholder_text="Exclude terms (comma separated)", width=270, height=30)
+        self.exclude_entry.pack(side="left")
 
         # 3. Main Workspace: Table + Details Panel
         work_paned = ctk.CTkFrame(parent, fg_color="transparent")
@@ -184,13 +233,17 @@ class BookHuntGUI(ctk.CTk):
         cols = ("idx", "title", "format", "source", "authors", "year", "score")
         self.tree = ttk.Treeview(table_frame, columns=cols, show="headings", selectmode="browse")
 
-        self.tree.heading("idx", text="#")
-        self.tree.heading("title", text="Title")
-        self.tree.heading("format", text="Format")
-        self.tree.heading("source", text="Source")
-        self.tree.heading("authors", text="Authors")
-        self.tree.heading("year", text="Year")
-        self.tree.heading("score", text="Score")
+        headings = {
+            "idx": "#",
+            "title": "Title ↕",
+            "format": "Format ↕",
+            "source": "Source ↕",
+            "authors": "Authors ↕",
+            "year": "Year ↕",
+            "score": "Score ↕",
+        }
+        for col_name, label in headings.items():
+            self.tree.heading(col_name, text=label, command=lambda c=col_name: self._sort_column(c))
 
         self.tree.column("idx", width=40, anchor="center")
         self.tree.column("title", width=290, anchor="w")
@@ -207,6 +260,27 @@ class BookHuntGUI(ctk.CTk):
 
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self.tree.bind("<Double-1>", lambda e: self.open_in_browser())
+
+        # Right-click context menu
+        self.context_menu = tk.Menu(
+            self,
+            tearoff=0,
+            background="#23272d",
+            foreground="#f0f0f0",
+            activebackground="#1f6aa5",
+            activeforeground="#ffffff",
+            relief="flat",
+            bd=1,
+        )
+        self.context_menu.add_command(label="📥 Download Selected", command=self.download_selected)
+        self.context_menu.add_command(label="🌐 Open in Browser", command=self.open_in_browser)
+        self.context_menu.add_command(label="📋 Copy Download URL", command=self.copy_download_link)
+        self.context_menu.add_command(label="📂 Open in Folder / Finder", command=self.open_containing_folder)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="📄 Copy Citation", command=self.copy_citation)
+
+        self.tree.bind("<Button-2>", self._show_context_menu)
+        self.tree.bind("<Button-3>", self._show_context_menu)
 
         # Details Panel (Right 35%)
         detail_frame = ctk.CTkFrame(work_paned, width=320, corner_radius=8)
@@ -239,7 +313,7 @@ class BookHuntGUI(ctk.CTk):
         self.btn_download_one = ctk.CTkButton(
             btn_box, text="📥 Download Selected", command=self.download_selected, state="disabled"
         )
-        self.btn_download_one.pack(fill="x", pady=3)
+        self.btn_download_one.pack(fill="x", pady=2)
 
         self.btn_open_browser = ctk.CTkButton(
             btn_box,
@@ -249,7 +323,7 @@ class BookHuntGUI(ctk.CTk):
             command=self.open_in_browser,
             state="disabled",
         )
-        self.btn_open_browser.pack(fill="x", pady=3)
+        self.btn_open_browser.pack(fill="x", pady=2)
 
         self.btn_copy_link = ctk.CTkButton(
             btn_box,
@@ -259,7 +333,27 @@ class BookHuntGUI(ctk.CTk):
             command=self.copy_download_link,
             state="disabled",
         )
-        self.btn_copy_link.pack(fill="x", pady=3)
+        self.btn_copy_link.pack(fill="x", pady=2)
+
+        self.btn_open_folder = ctk.CTkButton(
+            btn_box,
+            text="📂 Open in Folder / Finder",
+            fg_color="#3a3f4b",
+            hover_color="#4b5263",
+            command=self.open_containing_folder,
+            state="disabled",
+        )
+        self.btn_open_folder.pack(fill="x", pady=2)
+
+        self.btn_copy_citation = ctk.CTkButton(
+            btn_box,
+            text="📄 Copy Citation",
+            fg_color="#3a3f4b",
+            hover_color="#4b5263",
+            command=self.copy_citation,
+            state="disabled",
+        )
+        self.btn_copy_citation.pack(fill="x", pady=2)
 
         # 4. Bottom Status & Batch Download Bar
         bottom_bar = ctk.CTkFrame(parent, height=48, corner_radius=8)
@@ -402,18 +496,29 @@ class BookHuntGUI(ctk.CTk):
             enabled_sources.append("standard_ebooks")
         if self.src_oapen.get():
             enabled_sources.append("oapen")
+        if self.src_doab.get():
+            enabled_sources.append("doab")
+        if self.src_openalex.get():
+            enabled_sources.append("openalex")
         if self.src_hal.get():
             enabled_sources.append("hal_science")
         if self.src_zenodo.get():
             enabled_sources.append("zenodo")
 
         if not enabled_sources:
-
             messagebox.showwarning("No Sources Selected", "Please select at least one search provider.")
             return
 
         fmt = None if self.fmt_var.get() == "All" else self.fmt_var.get()
         limit = int(self.limit_var.get())
+
+        web_query = query
+        site = self.site_entry.get().strip().removeprefix("https://").removeprefix("http://").strip(" /")
+        if site:
+            web_query += f" site:{site}"
+        exclusions = [term.strip() for term in self.exclude_entry.get().split(",") if term.strip()]
+        for term in exclusions:
+            web_query += f' -"{term}"' if " " in term else f" -{term}"
 
         self.is_searching = True
         self.btn_search.configure(state="disabled", text="Searching...")
@@ -439,6 +544,7 @@ class BookHuntGUI(ctk.CTk):
                         file_format=fmt,
                         enabled_sources=enabled_sources,
                         validate_links=True,
+                        web_query=web_query,
                     )
                 )
                 self.after(0, self._on_search_complete, items, None)
@@ -448,6 +554,126 @@ class BookHuntGUI(ctk.CTk):
                 loop.close()
 
         threading.Thread(target=_worker, daemon=True).start()
+
+    def _select_all_sources(self):
+        for cb in [
+            self.src_dork,
+            self.src_archive,
+            self.src_arxiv,
+            self.src_gutenberg,
+            self.src_openlib,
+            self.src_standard,
+            self.src_oapen,
+            self.src_doab,
+            self.src_openalex,
+            self.src_hal,
+            self.src_zenodo,
+        ]:
+            cb.select()
+
+    def _clear_all_sources(self):
+        for cb in [
+            self.src_dork,
+            self.src_archive,
+            self.src_arxiv,
+            self.src_gutenberg,
+            self.src_openlib,
+            self.src_standard,
+            self.src_oapen,
+            self.src_doab,
+            self.src_openalex,
+            self.src_hal,
+            self.src_zenodo,
+        ]:
+            cb.deselect()
+
+    def _populate_table(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        for idx, item in enumerate(self.results, 1):
+            year_str = str(item.year) if item.year else "-"
+            authors_str = item.formatted_authors
+            self.tree.insert(
+                "",
+                "end",
+                iid=str(idx - 1),
+                values=(
+                    idx,
+                    item.title,
+                    item.format,
+                    item.source,
+                    authors_str,
+                    year_str,
+                    f"{int(item.score)}%",
+                ),
+            )
+
+    def _sort_column(self, col: str):
+        if not self.results:
+            return
+
+        attr_key = f"_sort_asc_{col}"
+        current_asc = getattr(self, attr_key, True)
+        setattr(self, attr_key, not current_asc)
+
+        if col == "idx":
+            self.results.sort(key=lambda x: x.score, reverse=current_asc)
+        elif col == "title":
+            self.results.sort(key=lambda x: x.title.lower(), reverse=not current_asc)
+        elif col == "format":
+            self.results.sort(key=lambda x: x.format.lower(), reverse=not current_asc)
+        elif col == "source":
+            self.results.sort(key=lambda x: x.source.lower(), reverse=not current_asc)
+        elif col == "authors":
+            self.results.sort(key=lambda x: x.formatted_authors.lower(), reverse=not current_asc)
+        elif col == "year":
+            self.results.sort(key=lambda x: (x.year is not None, x.year or 0), reverse=not current_asc)
+        elif col == "score":
+            self.results.sort(key=lambda x: x.score, reverse=not current_asc)
+
+        self._populate_table()
+        self._reset_inspector()
+
+    def _show_context_menu(self, event):
+        item_id = self.tree.identify_row(event.y)
+        if item_id:
+            self.tree.selection_set(item_id)
+            self._on_tree_select(None)
+            self.context_menu.tk_popup(event.x_root, event.y_root)
+
+    def copy_citation(self):
+        if not self.selected_item:
+            return
+        it = self.selected_item
+        year_str = f" ({it.year})" if it.year else ""
+        authors_str = f"{it.formatted_authors}. " if it.authors else ""
+        citation = f"{authors_str}{it.title}{year_str}. Available at: {it.details_url or it.download_url}"
+        self.clipboard_clear()
+        self.clipboard_append(citation)
+        self.lbl_status.configure(text="Citation copied to clipboard!")
+
+    def open_containing_folder(self):
+        if not self.selected_item:
+            return
+        downloader = Downloader(download_dir=self.download_dir)
+        ext = self.selected_item.format.lower() if self.selected_item.format else "pdf"
+        target_name = downloader.sanitize_filename(self.selected_item.title, ext)
+        target_path = Path(self.download_dir) / target_name
+
+        if target_path.exists():
+            if sys.platform == "darwin":
+                import subprocess
+                subprocess.run(["open", "-R", str(target_path)])
+            elif sys.platform == "win32":
+                import subprocess
+                subprocess.run(["explorer", f"/select,{str(target_path)}"])
+            else:
+                webbrowser.open(str(self.download_dir))
+            self.lbl_status.configure(text=f"Revealed in folder: {target_name}")
+        else:
+            webbrowser.open(str(Path(self.download_dir).as_uri()))
+            self.lbl_status.configure(text=f"Opened download folder: {self.download_dir}")
 
     def _on_search_complete(self, items: List[ResourceItem], error: Optional[str]):
         self.is_searching = False
@@ -468,24 +694,7 @@ class BookHuntGUI(ctk.CTk):
             return
 
         self.btn_download_all.configure(state="normal")
-
-        for idx, item in enumerate(items, 1):
-            year_str = str(item.year) if item.year else "-"
-            authors_str = item.formatted_authors
-            self.tree.insert(
-                "",
-                "end",
-                iid=str(idx - 1),
-                values=(
-                    idx,
-                    item.title,
-                    item.format,
-                    item.source,
-                    authors_str,
-                    year_str,
-                    f"{int(item.score)}%",
-                ),
-            )
+        self._populate_table()
 
     def _on_tree_select(self, event):
         selected = self.tree.selection()
@@ -518,6 +727,8 @@ class BookHuntGUI(ctk.CTk):
             self.btn_download_one.configure(state="normal")
             self.btn_open_browser.configure(state="normal")
             self.btn_copy_link.configure(state="normal")
+            self.btn_open_folder.configure(state="normal")
+            self.btn_copy_citation.configure(state="normal")
 
     def _reset_inspector(self):
         self.selected_item = None
@@ -531,6 +742,8 @@ class BookHuntGUI(ctk.CTk):
         self.btn_download_one.configure(state="disabled")
         self.btn_open_browser.configure(state="disabled")
         self.btn_copy_link.configure(state="disabled")
+        self.btn_open_folder.configure(state="disabled")
+        self.btn_copy_citation.configure(state="disabled")
 
     # -------------------------------------------------------------
     # Download Actions

@@ -13,6 +13,8 @@ A high-performance universal document and eBook search aggregator, dorking engin
 
 - 🔍 **Multi-Source Concurrent Aggregation**:
   - **Internet Archive (`archive.org`)**: Scanned books, manuscripts, historical documents, and texts.
+  - **OpenAlex Books**: Open access books, monographs, and textbooks with direct PDF full-text links.
+  - **DOAB (Directory of Open Access Books)**: Over 85,000 peer-reviewed academic open access books.
   - **arXiv**: Academic books, preprints, research papers, and technical surveys.
   - **Project Gutenberg (`gutendex`)**: Over 70,000 public-domain literary classics.
   - **Open Library**: Curated editions with direct lending and archive access links.
@@ -29,7 +31,10 @@ A high-performance universal document and eBook search aggregator, dorking engin
   - Interactive download picker (`1,3,5-8` or `all`), details inspection (`info <num>`), and link preview.
 - 🖥️ **Modern Desktop GUI (CustomTkinter)**:
   - Dark/Light/System theme with responsive search table, inspection panel, and multi-threaded background downloader.
-  - Interactive Dorking Studio with one-click copy and browser search.
+  - **Interactive Table**: Click-to-sort on any column (Title, Format, Source, Authors, Year, Score).
+  - **Right-Click Context Menu**: Quick download, open in browser, copy URL, reveal in Finder, and copy citation.
+  - **One-Click Actions**: Select All / Clear Sources, Reveal downloaded files in Finder/File Manager, and Copy formatted citation.
+  - **Dorking Studio**: Interactive studio with one-click copy and direct browser searching.
 - 📥 **Resilient Streaming Downloader**:
   - Streaming chunk downloads to avoid memory bloat on large files.
   - Automatic resume for interrupted downloads via HTTP `Range` headers.
@@ -124,7 +129,7 @@ This repository is pre-configured for seamless development in **Antigravity IDE*
 # Query only arXiv and Internet Archive
 ./bookhunt search "generative models" --sources arxiv,archive
 ```
-Available source aliases: `arxiv`, `archive`, `gutenberg`, `openlib`, `hal`, `oapen`, `zenodo`, `standardebooks`, `dork`, or `all`.
+Available source aliases: `arxiv`, `archive`, `gutenberg`, `openlib`, `hal`, `oapen`, `zenodo`, `standardebooks`, `doab`, `openalex`, `dork`, or `all`.
 
 ---
 

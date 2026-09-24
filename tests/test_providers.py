@@ -11,6 +11,8 @@ from scraper.providers.web_dork import WebDorkProvider
 from scraper.providers.zenodo import ZenodoProvider
 from scraper.providers.oapen import OapenProvider
 from scraper.providers.hal_science import HalScienceProvider
+from scraper.providers.doab import DoabProvider
+from scraper.providers.openalex import OpenAlexProvider
 
 
 PROVIDERS = [
@@ -23,6 +25,8 @@ PROVIDERS = [
     ZenodoProvider,
     OapenProvider,
     HalScienceProvider,
+    DoabProvider,
+    OpenAlexProvider,
 ]
 
 
@@ -37,3 +41,31 @@ def test_provider_subclass_contract(provider_cls):
     assert isinstance(instance.supported_formats, list)
     assert hasattr(instance, "search")
     assert callable(instance.search)
+
+
+def test_openalex_abstract_reconstruction():
+    provider = OpenAlexProvider()
+    inverted = {
+        "Deep": [0],
+        "learning": [1],
+        "is": [2],
+        "a": [3],
+        "subset": [4],
+        "of": [5],
+        "machine": [6],
+        "learning.": [7],
+    }
+    reconstructed = provider._reconstruct_abstract(inverted)
+    assert reconstructed == "Deep learning is a subset of machine learning."
+
+    assert provider._reconstruct_abstract(None) is None
+    assert provider._reconstruct_abstract({}) is None
+
+
+def test_universal_scraper_has_all_providers():
+    from scraper.engine import UniversalScraper
+    scraper = UniversalScraper()
+    assert "doab" in scraper.providers
+    assert "openalex" in scraper.providers
+    assert len(scraper.providers) == 11
+

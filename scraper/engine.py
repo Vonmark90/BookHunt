@@ -16,6 +16,8 @@ from .providers.standard_ebooks import StandardEbooksProvider
 from .providers.oapen import OapenProvider
 from .providers.hal_science import HalScienceProvider
 from .providers.zenodo import ZenodoProvider
+from .providers.doab import DoabProvider
+from .providers.openalex import OpenAlexProvider
 
 
 class UniversalScraper:
@@ -33,6 +35,8 @@ class UniversalScraper:
             "oapen": OapenProvider(timeout=timeout),
             "hal_science": HalScienceProvider(timeout=timeout),
             "zenodo": ZenodoProvider(timeout=timeout),
+            "doab": DoabProvider(timeout=timeout),
+            "openalex": OpenAlexProvider(timeout=timeout),
         }
 
 
@@ -43,6 +47,7 @@ class UniversalScraper:
         file_format: Optional[str] = None,
         enabled_sources: Optional[List[str]] = None,
         validate_links: bool = False,
+        web_query: Optional[str] = None,
     ) -> List[ResourceItem]:
         """Execute parallel searches across all designated providers.
 
@@ -63,7 +68,11 @@ class UniversalScraper:
 
         # Launch all provider searches concurrently
         tasks = [
-            provider.search(query=query, limit=limit_per_source, file_format=file_format)
+            provider.search(
+                query=(web_query or query) if provider is self.providers.get("web_dork") else query,
+                limit=limit_per_source,
+                file_format=file_format,
+            )
             for provider in active_providers
         ]
         results_nested = await asyncio.gather(*tasks, return_exceptions=True)

@@ -60,6 +60,8 @@ class WebDorkProvider(BaseProvider):
                 try:
                     items = await self._search_duckduckgo_html(client, dork_query, dork_type, limit - len(results))
                     for item in items:
+                        if file_format and item.format != file_format.upper():
+                            continue
                         if item.download_url not in seen_urls:
                             seen_urls.add(item.download_url)
                             results.append(item)
@@ -136,14 +138,17 @@ class WebDorkProvider(BaseProvider):
         """Extracts the actual destination URL from a search engine redirect parameter."""
         if not href:
             return None
-        if "uddg=" in href:
-            match = re.search(r"uddg=([^&]+)", href)
-            if match:
-                return urllib.parse.unquote(match.group(1))
-        if href.startswith("/l/?kh=-1&uddg="):
-            parts = href.split("uddg=")
-            if len(parts) > 1:
-                return urllib.parse.unquote(parts[1].split("&")[0])
+        parsed = urllib.parse.urlparse(href)
+        params = urllib.parse.parse_qs(parsed.query)
+        if params.get("uddg"):
+            target = params["uddg"][0]
+            # DDG sometimes double-encodes its redirect target.
+            for _ in range(2):
+                decoded = urllib.parse.unquote(target)
+                if decoded == target:
+                    break
+                target = decoded
+            return target if target.startswith(("http://", "https://")) else None
         if href.startswith("http://") or href.startswith("https://"):
             return href
         return None
@@ -152,10 +157,11 @@ class WebDorkProvider(BaseProvider):
         lower_url = url.lower()
         lower_title = title.lower()
         lower_snippet = snippet.lower()
+        path = urllib.parse.urlparse(url).path.lower()
 
-        if lower_url.endswith(".pdf") or ".pdf?" in lower_url or "[pdf]" in lower_title or "filetype: pdf" in lower_snippet:
+        if path.endswith(".pdf") or "[pdf]" in lower_title or "filetype: pdf" in lower_snippet:
             return "PDF"
-        if lower_url.endswith(".epub") or ".epub?" in lower_url or "[epub]" in lower_title:
+        if path.endswith(".epub") or "[epub]" in lower_title:
             return "EPUB"
         if lower_url.endswith(".mobi") or ".mobi?" in lower_url:
             return "MOBI"

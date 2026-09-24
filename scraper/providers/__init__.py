@@ -10,6 +10,8 @@ from .standard_ebooks import StandardEbooksProvider
 from .oapen import OapenProvider
 from .hal_science import HalScienceProvider
 from .zenodo import ZenodoProvider
+from .doab import DoabProvider
+from .openalex import OpenAlexProvider
 
 __all__ = [
     "BaseProvider",
@@ -22,5 +24,7 @@ __all__ = [
     "OapenProvider",
     "HalScienceProvider",
     "ZenodoProvider",
+    "DoabProvider",
+    "OpenAlexProvider",
 ]
 
