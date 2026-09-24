@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Universal eBook & PDF Scraper Launcher (BookHunt)
+set -e
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_EXEC="$DIR/.venv/bin/python"
+
+if [ ! -f "$PYTHON_EXEC" ]; then
+    echo "=========================================================="
+    echo "  BookHunt: Virtual environment not found at .venv"
+    echo "=========================================================="
+    if [ -f "$DIR/setup.sh" ]; then
+        echo "Running automated setup (./setup.sh)..."
+        echo ""
+        bash "$DIR/setup.sh"
+        echo ""
+    else
+        echo "Please create a virtual environment first:"
+        echo "  python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt"
+        exit 1
+    fi
+fi
+
+PYTHONPATH="$DIR" exec "$PYTHON_EXEC" -m scraper "$@"

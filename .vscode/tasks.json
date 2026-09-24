@@ -1,0 +1,35 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "BookHunt: Setup Environment",
+      "type": "shell",
+      "command": "./setup.sh",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "BookHunt: Run Tests",
+      "type": "shell",
+      "command": ".venv/bin/pytest",
+      "problemMatcher": [],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "BookHunt: Build macOS App Bundle",
+      "type": "shell",
+      "command": ".venv/bin/python build_app.py",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ]
+}

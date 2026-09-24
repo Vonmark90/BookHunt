@@ -1,0 +1,778 @@
+"""Native Desktop GUI for Universal eBook & PDF Scraper using CustomTkinter."""
+
+import asyncio
+import os
+import sys
+import threading
+import webbrowser
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+from typing import List, Optional
+from pathlib import Path
+
+import customtkinter as ctk
+
+from .models import ResourceItem
+from .engine import UniversalScraper
+from .downloader import Downloader
+from .exporter import ResultExporter
+from .dorker import DorkGenerator
+
+# Configure CustomTkinter theme
+ctk.set_appearance_mode("Dark")
+ctk.set_default_color_theme("blue")
+
+
+class BookHuntGUI(ctk.CTk):
+    """Main desktop application window."""
+
+    def __init__(self):
+        super().__init__()
+
+        self.title("BookHunt - Universal eBook & PDF Scraper")
+        self.geometry("1120x740")
+        self.minsize(920, 620)
+
+        # Application state
+        self.scraper = UniversalScraper()
+        self.results: List[ResourceItem] = []
+        self.selected_item: Optional[ResourceItem] = None
+        self.is_searching = False
+        self.is_downloading = False
+        self.download_dir = str(Path.home() / "Downloads" / "BookHunt")
+        os.makedirs(self.download_dir, exist_ok=True)
+
+        self._build_ui()
+
+    def _build_ui(self):
+        # Main Tabview
+        self.tabview = ctk.CTkTabview(self)
+        self.tabview.pack(fill="both", expand=True, padx=12, pady=12)
+
+        self.tab_search = self.tabview.add("🔍 Search & Download")
+        self.tab_dork = self.tabview.add("🎯 Dorking Studio")
+        self.tab_settings = self.tabview.add("⚙️ Settings")
+
+        self._build_search_tab()
+        self._build_dork_tab()
+        self._build_settings_tab()
+
+    # -------------------------------------------------------------
+    # TAB 1: Search & Download
+    # -------------------------------------------------------------
+    def _build_search_tab(self):
+        parent = self.tab_search
+
+        # 1. Search Bar Frame
+        search_frame = ctk.CTkFrame(parent, corner_radius=8)
+        search_frame.pack(fill="x", padx=8, pady=(4, 8))
+
+        self.search_entry = ctk.CTkEntry(
+            search_frame,
+            placeholder_text="Enter topic, book title, author, or research field (e.g., 'quantum algorithms', 'calculus')...",
+            height=38,
+            font=("Helvetica", 14),
+        )
+        self.search_entry.pack(side="left", fill="x", expand=True, padx=(12, 8), pady=10)
+        self.search_entry.bind("<Return>", lambda e: self.start_search())
+
+        self.btn_search = ctk.CTkButton(
+            search_frame,
+            text="Search Everywhere",
+            width=140,
+            height=38,
+            font=("Helvetica", 13, "bold"),
+            command=self.start_search,
+        )
+        self.btn_search.pack(side="left", padx=(0, 12), pady=10)
+
+        # 2. Filters Bar
+        filter_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        filter_frame.pack(fill="x", padx=8, pady=(0, 8))
+
+        # Format dropdown
+        ctk.CTkLabel(filter_frame, text="Format:", font=("Helvetica", 12, "bold")).pack(side="left", padx=(8, 4))
+        self.fmt_var = ctk.StringVar(value="All")
+        self.fmt_menu = ctk.CTkOptionMenu(
+            filter_frame,
+            values=["All", "PDF", "EPUB"],
+            variable=self.fmt_var,
+            width=90,
+            height=28,
+        )
+        self.fmt_menu.pack(side="left", padx=(0, 16))
+
+        # Limit per source
+        ctk.CTkLabel(filter_frame, text="Limit/Source:", font=("Helvetica", 12)).pack(side="left", padx=(0, 4))
+        self.limit_var = ctk.StringVar(value="10")
+        self.limit_menu = ctk.CTkOptionMenu(
+            filter_frame,
+            values=["5", "10", "15", "25"],
+            variable=self.limit_var,
+            width=70,
+            height=28,
+        )
+        self.limit_menu.pack(side="left", padx=(0, 20))
+
+        # Source toggles
+        ctk.CTkLabel(filter_frame, text="Sources:", font=("Helvetica", 12, "bold")).pack(side="left", padx=(0, 6))
+        self.src_dork = ctk.CTkCheckBox(filter_frame, text="Web Dork", width=85)
+        self.src_dork.select()
+        self.src_dork.pack(side="left", padx=2)
+
+        self.src_archive = ctk.CTkCheckBox(filter_frame, text="Archive", width=70)
+        self.src_archive.select()
+        self.src_archive.pack(side="left", padx=2)
+
+        self.src_arxiv = ctk.CTkCheckBox(filter_frame, text="arXiv", width=60)
+        self.src_arxiv.select()
+        self.src_arxiv.pack(side="left", padx=2)
+
+        self.src_gutenberg = ctk.CTkCheckBox(filter_frame, text="Gutenberg", width=85)
+        self.src_gutenberg.select()
+        self.src_gutenberg.pack(side="left", padx=2)
+
+        self.src_openlib = ctk.CTkCheckBox(filter_frame, text="OpenLib", width=75)
+        self.src_openlib.select()
+        self.src_openlib.pack(side="left", padx=2)
+
+        self.src_standard = ctk.CTkCheckBox(filter_frame, text="Std Ebooks", width=90)
+        self.src_standard.select()
+        self.src_standard.pack(side="left", padx=2)
+
+        self.src_oapen = ctk.CTkCheckBox(filter_frame, text="OAPEN", width=70)
+        self.src_oapen.select()
+        self.src_oapen.pack(side="left", padx=2)
+
+        self.src_hal = ctk.CTkCheckBox(filter_frame, text="HAL", width=55)
+        self.src_hal.select()
+        self.src_hal.pack(side="left", padx=2)
+
+        self.src_zenodo = ctk.CTkCheckBox(filter_frame, text="Zenodo", width=70)
+        self.src_zenodo.select()
+        self.src_zenodo.pack(side="left", padx=2)
+
+
+        # 3. Main Workspace: Table + Details Panel
+        work_paned = ctk.CTkFrame(parent, fg_color="transparent")
+        work_paned.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+
+        # Table Container (Left 65%)
+        table_frame = ctk.CTkFrame(work_paned)
+        table_frame.pack(side="left", fill="both", expand=True, padx=(0, 8))
+
+        # Configure style for dark-theme ttk Treeview
+        style = ttk.Style()
+        style.theme_use("default")
+        style.configure(
+            "Treeview",
+            background="#23272d",
+            foreground="#f0f0f0",
+            fieldbackground="#23272d",
+            rowheight=28,
+            font=("Helvetica", 11),
+        )
+        style.configure(
+            "Treeview.Heading",
+            background="#1e2227",
+            foreground="#61afef",
+            font=("Helvetica", 11, "bold"),
+            relief="flat",
+        )
+        style.map("Treeview", background=[("selected", "#1f6aa5")], foreground=[("selected", "#ffffff")])
+
+        cols = ("idx", "title", "format", "source", "authors", "year", "score")
+        self.tree = ttk.Treeview(table_frame, columns=cols, show="headings", selectmode="browse")
+
+        self.tree.heading("idx", text="#")
+        self.tree.heading("title", text="Title")
+        self.tree.heading("format", text="Format")
+        self.tree.heading("source", text="Source")
+        self.tree.heading("authors", text="Authors")
+        self.tree.heading("year", text="Year")
+        self.tree.heading("score", text="Score")
+
+        self.tree.column("idx", width=40, anchor="center")
+        self.tree.column("title", width=290, anchor="w")
+        self.tree.column("format", width=65, anchor="center")
+        self.tree.column("source", width=130, anchor="w")
+        self.tree.column("authors", width=140, anchor="w")
+        self.tree.column("year", width=55, anchor="center")
+        self.tree.column("score", width=55, anchor="center")
+
+        tree_scroll_y = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=tree_scroll_y.set)
+        tree_scroll_y.pack(side="right", fill="y")
+        self.tree.pack(side="left", fill="both", expand=True)
+
+        self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+        self.tree.bind("<Double-1>", lambda e: self.open_in_browser())
+
+        # Details Panel (Right 35%)
+        detail_frame = ctk.CTkFrame(work_paned, width=320, corner_radius=8)
+        detail_frame.pack(side="right", fill="both", padx=(0, 0))
+        detail_frame.pack_propagate(False)
+
+        ctk.CTkLabel(detail_frame, text="Resource Inspector", font=("Helvetica", 14, "bold")).pack(
+            anchor="w", padx=12, pady=(12, 6)
+        )
+
+        self.detail_title = ctk.CTkLabel(
+            detail_frame, text="Select an item to view details", wraplength=295, font=("Helvetica", 13, "bold"), justify="left"
+        )
+        self.detail_title.pack(anchor="w", padx=12, pady=4)
+
+        self.detail_meta = ctk.CTkLabel(
+            detail_frame, text="", wraplength=295, justify="left", text_color="#abb2bf", font=("Helvetica", 11)
+        )
+        self.detail_meta.pack(anchor="w", padx=12, pady=4)
+
+        self.detail_desc = ctk.CTkTextbox(detail_frame, height=140, font=("Helvetica", 11))
+        self.detail_desc.pack(fill="x", padx=12, pady=6)
+        self.detail_desc.insert("1.0", "Description / Snippet will appear here.")
+        self.detail_desc.configure(state="disabled")
+
+        # Action Buttons in Inspector
+        btn_box = ctk.CTkFrame(detail_frame, fg_color="transparent")
+        btn_box.pack(fill="x", padx=12, pady=6)
+
+        self.btn_download_one = ctk.CTkButton(
+            btn_box, text="📥 Download Selected", command=self.download_selected, state="disabled"
+        )
+        self.btn_download_one.pack(fill="x", pady=3)
+
+        self.btn_open_browser = ctk.CTkButton(
+            btn_box,
+            text="🌐 Open Link in Browser",
+            fg_color="#3a3f4b",
+            hover_color="#4b5263",
+            command=self.open_in_browser,
+            state="disabled",
+        )
+        self.btn_open_browser.pack(fill="x", pady=3)
+
+        self.btn_copy_link = ctk.CTkButton(
+            btn_box,
+            text="📋 Copy Download URL",
+            fg_color="#3a3f4b",
+            hover_color="#4b5263",
+            command=self.copy_download_link,
+            state="disabled",
+        )
+        self.btn_copy_link.pack(fill="x", pady=3)
+
+        # 4. Bottom Status & Batch Download Bar
+        bottom_bar = ctk.CTkFrame(parent, height=48, corner_radius=8)
+        bottom_bar.pack(fill="x", padx=8, pady=(0, 4))
+
+        self.lbl_status = ctk.CTkLabel(
+            bottom_bar, text="Ready. Enter a search query or explore Dorking Studio.", font=("Helvetica", 12)
+        )
+        self.lbl_status.pack(side="left", padx=12, pady=8)
+
+        self.progress_bar = ctk.CTkProgressBar(bottom_bar, width=180)
+        self.progress_bar.set(0)
+        self.progress_bar.pack(side="left", padx=12, pady=8)
+
+        # Batch Download & Export buttons
+        self.btn_export = ctk.CTkOptionMenu(
+            bottom_bar,
+            values=["Export...", "JSON", "CSV", "Markdown", "BibTeX"],
+            command=self.export_results,
+            width=110,
+        )
+        self.btn_export.pack(side="right", padx=(4, 12), pady=8)
+
+        self.btn_download_all = ctk.CTkButton(
+            bottom_bar,
+            text="📥 Download All",
+            width=120,
+            fg_color="#2da44e",
+            hover_color="#2c974b",
+            command=self.download_all,
+            state="disabled",
+        )
+        self.btn_download_all.pack(side="right", padx=4, pady=8)
+
+    # -------------------------------------------------------------
+    # TAB 2: Dorking Studio
+    # -------------------------------------------------------------
+    def _build_dork_tab(self):
+        parent = self.tab_dork
+
+        header_frame = ctk.CTkFrame(parent, corner_radius=8)
+        header_frame.pack(fill="x", padx=8, pady=8)
+
+        self.dork_entry = ctk.CTkEntry(
+            header_frame,
+            placeholder_text="Enter topic to generate precision search dorks (e.g., 'machine learning', 'linear algebra')...",
+            height=38,
+            font=("Helvetica", 13),
+        )
+        self.dork_entry.pack(side="left", fill="x", expand=True, padx=(12, 8), pady=10)
+        self.dork_entry.bind("<Return>", lambda e: self.generate_dorks())
+
+        btn_gen_dorks = ctk.CTkButton(
+            header_frame,
+            text="Generate Dorks",
+            width=140,
+            height=38,
+            font=("Helvetica", 13, "bold"),
+            command=self.generate_dorks,
+        )
+        btn_gen_dorks.pack(side="left", padx=(0, 12), pady=10)
+
+        # Dork Cards Container
+        self.dork_scroll = ctk.CTkScrollableFrame(parent, label_text="Precision Google & DuckDuckGo Search Patterns")
+        self.dork_scroll.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+
+        # Initial message
+        self.lbl_dork_empty = ctk.CTkLabel(
+            self.dork_scroll,
+            text="Enter a topic above and click 'Generate Dorks' to produce ready-to-run queries for university lecture notes, direct PDF/eBook indices, and open server directories.",
+            wraplength=700,
+            font=("Helvetica", 13),
+            text_color="#abb2bf",
+        )
+        self.lbl_dork_empty.pack(pady=40)
+
+    # -------------------------------------------------------------
+    # TAB 3: Settings
+    # -------------------------------------------------------------
+    def _build_settings_tab(self):
+        parent = self.tab_settings
+
+        card = ctk.CTkFrame(parent, corner_radius=8)
+        card.pack(fill="x", padx=16, pady=16)
+
+        ctk.CTkLabel(card, text="General Configuration", font=("Helvetica", 16, "bold")).pack(
+            anchor="w", padx=16, pady=(16, 8)
+        )
+
+        # Download Directory
+        dl_row = ctk.CTkFrame(card, fg_color="transparent")
+        dl_row.pack(fill="x", padx=16, pady=8)
+        ctk.CTkLabel(dl_row, text="Downloads Folder:", font=("Helvetica", 13, "bold"), width=140, anchor="w").pack(
+            side="left"
+        )
+        self.lbl_dl_path = ctk.CTkEntry(dl_row, height=32)
+        self.lbl_dl_path.insert(0, self.download_dir)
+        self.lbl_dl_path.configure(state="readonly")
+        self.lbl_dl_path.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        btn_browse = ctk.CTkButton(dl_row, text="Browse...", width=100, command=self.change_download_dir)
+        btn_browse.pack(side="left")
+
+        # Appearance Mode
+        theme_row = ctk.CTkFrame(card, fg_color="transparent")
+        theme_row.pack(fill="x", padx=16, pady=8)
+        ctk.CTkLabel(theme_row, text="Theme Mode:", font=("Helvetica", 13, "bold"), width=140, anchor="w").pack(
+            side="left"
+        )
+        self.theme_menu = ctk.CTkOptionMenu(
+            theme_row, values=["Dark", "Light", "System"], command=ctk.set_appearance_mode, width=140
+        )
+        self.theme_menu.pack(side="left")
+
+    # -------------------------------------------------------------
+    # Search Logic
+    # -------------------------------------------------------------
+    def start_search(self):
+        query = self.search_entry.get().strip()
+        if not query:
+            messagebox.showwarning("Search Topic Required", "Please enter a topic or keywords to search.")
+            return
+
+        if self.is_searching:
+            return
+
+        # Determine enabled sources
+        enabled_sources = []
+        if self.src_dork.get():
+            enabled_sources.append("web_dork")
+        if self.src_archive.get():
+            enabled_sources.append("internet_archive")
+        if self.src_arxiv.get():
+            enabled_sources.append("arxiv")
+        if self.src_gutenberg.get():
+            enabled_sources.append("gutenberg")
+        if self.src_openlib.get():
+            enabled_sources.append("open_library")
+        if self.src_standard.get():
+            enabled_sources.append("standard_ebooks")
+        if self.src_oapen.get():
+            enabled_sources.append("oapen")
+        if self.src_hal.get():
+            enabled_sources.append("hal_science")
+        if self.src_zenodo.get():
+            enabled_sources.append("zenodo")
+
+        if not enabled_sources:
+
+            messagebox.showwarning("No Sources Selected", "Please select at least one search provider.")
+            return
+
+        fmt = None if self.fmt_var.get() == "All" else self.fmt_var.get()
+        limit = int(self.limit_var.get())
+
+        self.is_searching = True
+        self.btn_search.configure(state="disabled", text="Searching...")
+        self.lbl_status.configure(text=f"Searching for '{query}' across {len(enabled_sources)} providers...")
+        self.progress_bar.set(0)
+        self.progress_bar.start()
+
+        # Clear existing rows
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        self.results = []
+        self._reset_inspector()
+
+        # Run search asynchronously in a background worker thread
+        def _worker():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                items = loop.run_until_complete(
+                    self.scraper.search(
+                        query=query,
+                        limit_per_source=limit,
+                        file_format=fmt,
+                        enabled_sources=enabled_sources,
+                        validate_links=True,
+                    )
+                )
+                self.after(0, self._on_search_complete, items, None)
+            except Exception as e:
+                self.after(0, self._on_search_complete, [], str(e))
+            finally:
+                loop.close()
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_search_complete(self, items: List[ResourceItem], error: Optional[str]):
+        self.is_searching = False
+        self.btn_search.configure(state="normal", text="Search Everywhere")
+        self.progress_bar.stop()
+        self.progress_bar.set(0)
+
+        if error:
+            self.lbl_status.configure(text=f"Search failed: {error}")
+            messagebox.showerror("Search Error", f"An error occurred during search:\n{error}")
+            return
+
+        self.results = items
+        self.lbl_status.configure(text=f"Found {len(items)} resources matching query.")
+
+        if not items:
+            self.btn_download_all.configure(state="disabled")
+            return
+
+        self.btn_download_all.configure(state="normal")
+
+        for idx, item in enumerate(items, 1):
+            year_str = str(item.year) if item.year else "-"
+            authors_str = item.formatted_authors
+            self.tree.insert(
+                "",
+                "end",
+                iid=str(idx - 1),
+                values=(
+                    idx,
+                    item.title,
+                    item.format,
+                    item.source,
+                    authors_str,
+                    year_str,
+                    f"{int(item.score)}%",
+                ),
+            )
+
+    def _on_tree_select(self, event):
+        selected = self.tree.selection()
+        if not selected:
+            self._reset_inspector()
+            return
+
+        idx = int(selected[0])
+        if 0 <= idx < len(self.results):
+            item = self.results[idx]
+            self.selected_item = item
+
+            self.detail_title.configure(text=item.title)
+            meta_str = (
+                f"Format: {item.format} | Source: {item.source}\n"
+                f"Authors: {item.formatted_authors}\n"
+                f"Year: {item.year or 'Unknown'} | Size: {item.formatted_size}\n"
+                f"Relevance: {item.score:.1f}%"
+            )
+            if item.dork_type:
+                meta_str += f"\nDork Type: {item.dork_type}"
+
+            self.detail_meta.configure(text=meta_str)
+
+            self.detail_desc.configure(state="normal")
+            self.detail_desc.delete("1.0", "end")
+            self.detail_desc.insert("1.0", item.description or "No description provided by source.")
+            self.detail_desc.configure(state="disabled")
+
+            self.btn_download_one.configure(state="normal")
+            self.btn_open_browser.configure(state="normal")
+            self.btn_copy_link.configure(state="normal")
+
+    def _reset_inspector(self):
+        self.selected_item = None
+        self.detail_title.configure(text="Select an item to view details")
+        self.detail_meta.configure(text="")
+        self.detail_desc.configure(state="normal")
+        self.detail_desc.delete("1.0", "end")
+        self.detail_desc.insert("1.0", "Description / Snippet will appear here.")
+        self.detail_desc.configure(state="disabled")
+
+        self.btn_download_one.configure(state="disabled")
+        self.btn_open_browser.configure(state="disabled")
+        self.btn_copy_link.configure(state="disabled")
+
+    # -------------------------------------------------------------
+    # Download Actions
+    # -------------------------------------------------------------
+    def download_selected(self):
+        if not self.selected_item or self.is_downloading:
+            return
+
+        item = self.selected_item
+        self.is_downloading = True
+        self.btn_download_one.configure(state="disabled", text="Downloading...")
+        self.lbl_status.configure(text=f"Downloading '{item.title[:35]}...'")
+        self.progress_bar.start()
+
+        def _worker():
+            downloader = Downloader(download_dir=self.download_dir)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                success, path_or_err = loop.run_until_complete(downloader.download_item(item))
+                self.after(0, self._on_download_one_complete, success, path_or_err)
+            finally:
+                loop.close()
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_download_one_complete(self, success: bool, msg: str):
+        self.is_downloading = False
+        self.btn_download_one.configure(state="normal", text="📥 Download Selected")
+        self.progress_bar.stop()
+        self.progress_bar.set(0)
+
+        if success:
+            self.lbl_status.configure(text=f"Saved to: {Path(msg).name}")
+            messagebox.showinfo("Download Complete", f"File saved successfully:\n{msg}")
+        else:
+            self.lbl_status.configure(text=f"Download failed: {msg}")
+            messagebox.showerror("Download Failed", f"Could not download file:\n{msg}")
+
+    def download_all(self):
+        if not self.results or self.is_downloading:
+            return
+
+        confirm = messagebox.askyesno(
+            "Batch Download", f"Download all {len(self.results)} resources to:\n{self.download_dir}?"
+        )
+        if not confirm:
+            return
+
+        self.is_downloading = True
+        self.btn_download_all.configure(state="disabled", text="Downloading All...")
+        self.progress_bar.start()
+
+        def _worker():
+            downloader = Downloader(download_dir=self.download_dir)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                res = loop.run_until_complete(downloader.download_multiple(self.results))
+                success_count = sum(1 for _, s, _ in res if s)
+                self.after(0, self._on_download_all_complete, success_count, len(self.results))
+            finally:
+                loop.close()
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_download_all_complete(self, succeeded: int, total: int):
+        self.is_downloading = False
+        self.btn_download_all.configure(state="normal", text="📥 Download All")
+        self.progress_bar.stop()
+        self.progress_bar.set(0)
+
+        self.lbl_status.configure(text=f"Batch download finished: {succeeded}/{total} succeeded.")
+        messagebox.showinfo(
+            "Batch Download Complete", f"Finished downloading files:\n{succeeded} of {total} saved successfully."
+        )
+
+    # -------------------------------------------------------------
+    # External Links & Helpers
+    # -------------------------------------------------------------
+    def open_in_browser(self):
+        if not self.selected_item:
+            return
+        target = self.selected_item.details_url or self.selected_item.download_url
+        webbrowser.open(target)
+
+    def copy_download_link(self):
+        if not self.selected_item:
+            return
+        self.clipboard_clear()
+        self.clipboard_append(self.selected_item.download_url)
+        self.lbl_status.configure(text="Download URL copied to clipboard.")
+
+    def change_download_dir(self):
+        selected = filedialog.askdirectory(initialdir=self.download_dir, title="Select Downloads Folder")
+        if selected:
+            self.download_dir = selected
+            self.lbl_dl_path.configure(state="normal")
+            self.lbl_dl_path.delete(0, "end")
+            self.lbl_dl_path.insert(0, selected)
+            self.lbl_dl_path.configure(state="readonly")
+
+    def export_results(self, format_choice: str):
+        if format_choice == "Export..." or not self.results:
+            return
+
+        fmt = format_choice.lower()
+        ext_map = {"json": ".json", "csv": ".csv", "markdown": ".md", "bibtex": ".bib"}
+        ext = ext_map.get(fmt, ".json")
+
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=ext,
+            filetypes=[(f"{format_choice} Files", f"*{ext}")],
+            initialfile=f"bookhunt_results{ext}",
+            title="Export Search Results",
+        )
+        if not file_path:
+            self.btn_export.set("Export...")
+            return
+
+        try:
+            if fmt == "json":
+                ResultExporter.to_json(self.results, file_path)
+            elif fmt == "csv":
+                ResultExporter.to_csv(self.results, file_path)
+            elif fmt == "markdown":
+                ResultExporter.to_markdown(self.results, file_path, topic=self.search_entry.get())
+            elif fmt == "bibtex":
+                ResultExporter.to_bibtex(self.results, file_path)
+
+            messagebox.showinfo("Export Successful", f"Results exported to:\n{file_path}")
+            self.lbl_status.configure(text=f"Exported {len(self.results)} items to {Path(file_path).name}")
+        except Exception as e:
+            messagebox.showerror("Export Failed", f"Could not export file:\n{str(e)}")
+        finally:
+            self.btn_export.set("Export...")
+
+    # -------------------------------------------------------------
+    # Dorking Studio Logic
+    # -------------------------------------------------------------
+    def generate_dorks(self):
+        topic = self.dork_entry.get().strip()
+        if not topic:
+            messagebox.showwarning("Topic Required", "Please enter a topic to generate search dorks.")
+            return
+
+        # Clear existing dork cards
+        for widget in self.dork_scroll.winfo_children():
+            widget.destroy()
+
+        dorks = DorkGenerator.get_dorks_for_topic(topic=topic)
+
+        for pattern, query in dorks:
+            card = ctk.CTkFrame(self.dork_scroll, corner_radius=6)
+            card.pack(fill="x", padx=6, pady=6)
+
+            top_row = ctk.CTkFrame(card, fg_color="transparent")
+            top_row.pack(fill="x", padx=10, pady=(8, 2))
+
+            ctk.CTkLabel(top_row, text=pattern.name, font=("Helvetica", 13, "bold"), text_color="#61afef").pack(
+                side="left"
+            )
+            badge = ctk.CTkLabel(
+                top_row,
+                text=pattern.category,
+                font=("Helvetica", 10, "bold"),
+                fg_color="#3a3f4b",
+                corner_radius=4,
+                width=65,
+                height=20,
+            )
+            badge.pack(side="left", padx=8)
+
+            desc = ctk.CTkLabel(card, text=pattern.description, font=("Helvetica", 11), text_color="#abb2bf", anchor="w")
+            desc.pack(fill="x", padx=10, pady=(0, 4))
+
+            # Query display box
+            q_box = ctk.CTkEntry(card, font=("Courier", 11), height=30)
+            q_box.insert(0, query)
+            q_box.configure(state="readonly")
+            q_box.pack(fill="x", padx=10, pady=4)
+
+            # Actions row
+            actions = ctk.CTkFrame(card, fg_color="transparent")
+            actions.pack(fill="x", padx=10, pady=(4, 8))
+
+            ctk.CTkButton(
+                actions,
+                text="📋 Copy Query",
+                width=110,
+                height=26,
+                fg_color="#3a3f4b",
+                hover_color="#4b5263",
+                command=lambda q=query: self._copy_text(q),
+            ).pack(side="left", padx=(0, 6))
+
+            ctk.CTkButton(
+                actions,
+                text="🌐 Open in Google",
+                width=120,
+                height=26,
+                fg_color="#3a3f4b",
+                hover_color="#4b5263",
+                command=lambda q=query: webbrowser.open(f"https://www.google.com/search?q={q}"),
+            ).pack(side="left", padx=(0, 6))
+
+            ctk.CTkButton(
+                actions,
+                text="🦆 Open in DuckDuckGo",
+                width=140,
+                height=26,
+                fg_color="#3a3f4b",
+                hover_color="#4b5263",
+                command=lambda q=query: webbrowser.open(f"https://duckduckgo.com/?q={q}"),
+            ).pack(side="left", padx=(0, 6))
+
+            ctk.CTkButton(
+                actions,
+                text="⚡ Search in App",
+                width=120,
+                height=26,
+                fg_color="#1f6aa5",
+                command=lambda t=topic: self._search_topic_from_dork(t),
+            ).pack(side="right")
+
+    def _copy_text(self, text: str):
+        self.clipboard_clear()
+        self.clipboard_append(text)
+        self.lbl_status.configure(text="Query copied to clipboard!")
+
+    def _search_topic_from_dork(self, topic: str):
+        self.tabview.set("🔍 Search & Download")
+        self.search_entry.delete(0, "end")
+        self.search_entry.insert(0, topic)
+        self.start_search()
+
+
+def launch_gui():
+    """Entry point for running the GUI."""
+    app = BookHuntGUI()
+    app.mainloop()
+
+
+if __name__ == "__main__":
+    launch_gui()
