@@ -52,9 +52,9 @@ def display_results_table(items: list[ResourceItem], topic: str) -> None:
     console.print(table)
 
 
-async def interactive_selection_loop(items: list[ResourceItem], download_dir: str) -> None:
+async def interactive_selection_loop(items: list[ResourceItem], download_dir: str, connections: int = 4) -> None:
     """Interactive loop allowing the user to inspect or download items."""
-    downloader = Downloader(download_dir=download_dir)
+    downloader = Downloader(download_dir=download_dir, max_connections=connections)
 
     while True:
         console.print("\n[bold yellow]Actions:[/bold yellow] Enter item numbers to download (e.g. [bold cyan]1,3,5-7[/bold cyan]), [bold cyan]'info <num>'[/bold cyan] for details, [bold cyan]'all'[/bold cyan] to download all, or [bold cyan]'q'[/bold cyan] to exit:")
@@ -140,6 +140,7 @@ def cli():
 @click.option("--download", "-d", is_flag=True, default=False, help="Download all discovered resources immediately")
 @click.option("--interactive/--no-interactive", "-i", default=True, help="Enter interactive download selection mode")
 @click.option("--output", "-o", default=None, help="Export results to file (.json, .csv, .md, .bib)")
+@click.option("--connections", "-c", default=4, type=int, help="Max parallel download connections/segments per file (Aria2-style acceleration, 1-16)")
 @click.option("--out-dir", default="./downloads", help="Directory where downloaded files are saved")
 def search(
     topic: str,
@@ -149,6 +150,7 @@ def search(
     validate: bool,
     download: bool,
     interactive: bool,
+    connections: int,
     output: str | None,
     out_dir: str,
 ):
@@ -227,7 +229,7 @@ def search(
 
     # Interactive mode
     if interactive:
-        asyncio.run(interactive_selection_loop(items, download_dir=out_dir))
+        asyncio.run(interactive_selection_loop(items, download_dir=out_dir, connections=connections))
 
 
 @cli.command()
