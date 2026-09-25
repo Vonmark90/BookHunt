@@ -75,26 +75,6 @@ This automatically:
 3. Installs all required dependencies and test frameworks
 4. Verifies the CLI entrypoint
 
----
-
-## 💻 Working with Antigravity IDE
-
-This repository is pre-configured for seamless development in **Antigravity IDE**:
-
-1. **Open the Project**:
-   ```bash
-   agy .
-   # or open this directory in Antigravity IDE
-   ```
-2. **Built-in Run & Debug Configurations** (<kbd>F5</kbd>):
-   - `BookHunt GUI (Desktop Application)`: Launches the native CustomTkinter GUI.
-   - `BookHunt CLI: Search Quantum Computing`: Runs an interactive sample CLI search.
-   - `BookHunt CLI: Dork Generator`: Generates targeted search dorks.
-   - `Pytest: Run All Tests`: Runs the unit test suite inside the editor.
-3. **Agent Rules & Context**:
-   - `AGENTS.md` and `.agents/rules/architecture.md` are automatically discovered by Antigravity IDE to guide the AI assistant with architecture, coding conventions, and provider patterns.
-
----
 
 ## 📖 Usage Guide
 
